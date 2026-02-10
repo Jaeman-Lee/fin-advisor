@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+data/investment.db
+data/investment.db-wal
+data/investment.db-shm
+.claude/agent-memory/
+*.egg-info/
+dist/
+build/
+.env
