@@ -103,6 +103,48 @@ print(f'\nReport stored: ID={report_id}')
 | `cross_theme` | `compute_theme_sentiment_matrix(db)` | 테마별 감성 매트릭스 |
 | `queries` | `AnalyticalQueries(db).*` | 프리빌트 분석 쿼리 |
 
+## Portfolio Trade Management
+
+사용자의 실매매 거래를 `portfolio_trades` 테이블에 기록하고, 포트폴리오 현황을 추적한다.
+
+### 거래 기록
+```python
+db.insert_trade(
+    asset_id=db.get_asset_id('GOOGL'),
+    trade_date='2026-02-20', action='buy',
+    quantity=3, price=302.85,
+    tranche=1,                    # 분할 매수 회차
+    strategy='US빅테크과매도',      # 전략명
+    report_id=3,                  # advisory_reports 연결
+    notes='RSI 31.2 과매도 진입'
+)
+```
+
+### 포트폴리오 현황 조회
+```python
+positions = db.get_open_positions()
+# → [{'ticker': 'GOOGL', 'shares': 3, 'avg_price': 302.85, 'total_cost': 908.55, 'strategy': '...'}, ...]
+```
+
+### 실시간 P&L 계산
+```python
+import yfinance as yf
+for p in db.get_open_positions():
+    current = yf.Ticker(p['ticker']).history(period='1d')['Close'].iloc[-1]
+    pnl = (current - p['avg_price']) * p['shares']
+    pnl_pct = (current / p['avg_price'] - 1) * 100
+    print(f"{p['ticker']}: {pnl_pct:+.2f}% (${pnl:+,.2f})")
+```
+
+### 현재 활성 전략
+| 전략 | 종목 | 상태 | 핸드오프 문서 |
+|------|------|------|-------------|
+| US빅테크과매도 | GOOGL, AMZN, MSFT | 1차 매수 완료, 2·3차 대기 | `journals/20260220_status.md` |
+
+**분할 매수 트리거 (어느 하나 충족 시 실행):**
+- **2차**: 5% 하락 OR 2주 경과(3/6) OR RSI 45 회복
+- **3차**: MACD 골든크로스 OR 4주 경과(3/20) OR SMA20 탈환
+
 ## Response Format
 
 ### 투자 자문 보고서 구조
@@ -146,6 +188,14 @@ print(f'\nReport stored: ID={report_id}')
 | `investment_signals` | buy/sell/hold signals with strength |
 | `butterfly_chains` | causal chain events with confidence |
 | `advisory_reports` | generated report history |
+| `portfolio_trades` | 실매매 기록 (action, quantity, price, tranche, strategy) |
+
+## Key Documents
+| File | Purpose |
+|------|---------|
+| `20260220_advisor.md` | 최신 투자 자문 보고서 (실행 기록 포함) |
+| `journals/20260220_investment_journal.md` | 투자 일지 (분석→결정→실행 전 과정) |
+| `journals/20260220_status.md` | 에이전트 핸드오프 문서 (미완료 작업 포함) |
 
 # Persistent Agent Memory
 

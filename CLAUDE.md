@@ -43,7 +43,7 @@ data/investment.db         # SQLite 데이터베이스
 
 ## Database
 
-SQLite DB with 10 tables:
+SQLite DB with 11 tables:
 - `asset_registry`: 추적 자산 마스터 (주식/채권/원자재/암호화폐/FX)
 - `market_data`: OHLCV + 기술적 지표 (RSI, MACD, Bollinger, SMA)
 - `raw_data_items`: 수집된 원본 데이터
@@ -53,6 +53,13 @@ SQLite DB with 10 tables:
 - `investment_signals`: 투자 시그널 (buy/sell/hold)
 - `advisory_reports`: 자문 보고서 이력
 - `data_sources`: 데이터 소스 추적
+- `portfolio_trades`: 실매매 거래 기록 (매수/매도, 분할매수 회차, 전략명)
+
+## Journals & Reports
+
+- `20260220_advisor.md`: 투자 자문 보고서 (실행 기록 포함)
+- `journals/20260220_investment_journal.md`: 투자 일지 (분석→결정→실행)
+- `journals/20260220_status.md`: 에이전트 핸드오프 문서 (미완료 작업 포함)
 
 ## Key Rules
 

@@ -76,6 +76,26 @@ result = db.execute_readonly('''
 | `investment_signals` | asset_id, signal_type (buy/sell/hold), strength, source_type, rationale |
 | `butterfly_chains` | trigger_event, final_impact, confidence |
 | `advisory_reports` | report_type, title, recommendations (JSON), risk_assessment |
+| `portfolio_trades` | asset_id, trade_date, action (buy/sell), quantity, price, total_cost, tranche, strategy |
+
+### Portfolio Queries
+```python
+# 보유 포지션 조회
+db.get_open_positions()
+# → ticker, shares, avg_price, total_cost, strategy
+
+# 전략별 거래 내역
+db.get_trades(strategy='US빅테크과매도')
+
+# Read-only SQL로 P&L 조회
+db.execute_readonly('''
+    SELECT a.ticker, t.quantity, t.price as buy_price,
+           (SELECT close FROM market_data WHERE asset_id = t.asset_id ORDER BY date DESC LIMIT 1) as current_price
+    FROM portfolio_trades t
+    JOIN asset_registry a ON t.asset_id = a.id
+    WHERE t.action = 'buy'
+''')
+```
 
 ## Response Format
 - 쿼리 결과를 사용자 친화적인 테이블이나 요약 형태로 제공
