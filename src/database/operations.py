@@ -335,6 +335,60 @@ class DatabaseOperations:
             row = conn.execute(query, params).fetchone()
             return dict(row) if row else None
 
+    # ── Portfolio Trades ───────────────────────────────────────────────────
+
+    def insert_trade(self, asset_id: int, trade_date: str, action: str,
+                     quantity: int, price: float, fees: float = 0,
+                     tranche: int | None = None, strategy: str | None = None,
+                     report_id: int | None = None, notes: str | None = None) -> int:
+        total_cost = quantity * price + fees
+        with self._conn() as conn:
+            cur = conn.execute(
+                """INSERT INTO portfolio_trades
+                   (asset_id, trade_date, action, quantity, price, total_cost,
+                    fees, tranche, strategy, report_id, notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (asset_id, trade_date, action, quantity, price, total_cost,
+                 fees, tranche, strategy, report_id, notes),
+            )
+            return cur.lastrowid
+
+    def get_open_positions(self) -> list[dict]:
+        """Get current portfolio positions with net quantities."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                """SELECT a.ticker, a.name, a.asset_type,
+                      SUM(CASE WHEN t.action='buy' THEN t.quantity ELSE -t.quantity END) as shares,
+                      SUM(CASE WHEN t.action='buy' THEN t.total_cost ELSE -t.total_cost END) as total_cost,
+                      ROUND(SUM(CASE WHEN t.action='buy' THEN t.total_cost ELSE -t.total_cost END)
+                        / NULLIF(SUM(CASE WHEN t.action='buy' THEN t.quantity ELSE -t.quantity END), 0), 2) as avg_price,
+                      t.strategy
+                   FROM portfolio_trades t
+                   JOIN asset_registry a ON t.asset_id = a.id
+                   GROUP BY a.ticker, t.strategy
+                   HAVING shares > 0
+                   ORDER BY total_cost DESC"""
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_trades(self, strategy: str | None = None,
+                   ticker: str | None = None) -> list[dict]:
+        with self._conn() as conn:
+            query = """SELECT t.*, a.ticker, a.name as asset_name
+                       FROM portfolio_trades t
+                       JOIN asset_registry a ON t.asset_id = a.id
+                       WHERE 1=1"""
+            params: list = []
+            if strategy:
+                query += " AND t.strategy = ?"
+                params.append(strategy)
+            if ticker:
+                query += " AND a.ticker = ?"
+                params.append(ticker)
+            query += " ORDER BY t.trade_date DESC, t.created_at DESC"
+            rows = conn.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+
     # ── Generic Query ──────────────────────────────────────────────────────
 
     def execute_readonly(self, sql: str, params: tuple = ()) -> list[dict]:

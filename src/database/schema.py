@@ -183,6 +183,29 @@ CREATE TABLE IF NOT EXISTS advisory_reports (
 );
 
 -- ═══════════════════════════════════════════════════════════════════════════
+-- 11. portfolio_trades: 실매매 거래 기록
+-- ═══════════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS portfolio_trades (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id        INTEGER NOT NULL REFERENCES asset_registry(id),
+    trade_date      TEXT NOT NULL,              -- 거래일 (YYYY-MM-DD)
+    action          TEXT NOT NULL,              -- 'buy','sell'
+    quantity        INTEGER NOT NULL,           -- 주수
+    price           REAL NOT NULL,              -- 주당 매수/매도가
+    total_cost      REAL NOT NULL,              -- quantity * price
+    fees            REAL DEFAULT 0,             -- 수수료
+    tranche         INTEGER,                    -- 분할 매수 회차 (1,2,3)
+    strategy        TEXT,                       -- 전략명 (예: 'US빅테크과매도')
+    report_id       INTEGER REFERENCES advisory_reports(id),
+    notes           TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_trades_asset ON portfolio_trades(asset_id);
+CREATE INDEX IF NOT EXISTS idx_trades_date ON portfolio_trades(trade_date);
+CREATE INDEX IF NOT EXISTS idx_trades_strategy ON portfolio_trades(strategy);
+
+-- ═══════════════════════════════════════════════════════════════════════════
 -- Seed: default data sources
 -- ═══════════════════════════════════════════════════════════════════════════
 INSERT OR IGNORE INTO data_sources (name, source_type, description) VALUES
