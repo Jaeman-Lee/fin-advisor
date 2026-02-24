@@ -10,3 +10,4 @@ data/investment.db-shm
 dist/
 build/
 .env
+logs/

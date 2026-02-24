@@ -11,5 +11,8 @@ python-dateutil>=2.8.2
 streamlit>=1.30.0
 plotly>=5.18.0
 
+# HTTP (Telegram API)
+requests>=2.31.0
+
 # Test
 pytest>=7.4.0

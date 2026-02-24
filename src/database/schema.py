@@ -206,12 +206,44 @@ CREATE INDEX IF NOT EXISTS idx_trades_date ON portfolio_trades(trade_date);
 CREATE INDEX IF NOT EXISTS idx_trades_strategy ON portfolio_trades(strategy);
 
 -- ═══════════════════════════════════════════════════════════════════════════
+-- 12. alert_log: 알림 전송 이력 (중복 방지용)
+-- ═══════════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS alert_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    dedup_key   TEXT NOT NULL,                -- 예: 'rsi:GOOGL:oversold:2026-02-22'
+    category    TEXT NOT NULL,                -- 'rsi','price_change','macd','golden_cross', etc.
+    ticker      TEXT,
+    priority    TEXT NOT NULL DEFAULT 'INFO', -- 'INFO','WARNING','CRITICAL'
+    message     TEXT NOT NULL,
+    sent_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at  TEXT                          -- NULL = 영구 (분할매수 트리거 등)
+);
+
+CREATE INDEX IF NOT EXISTS idx_alert_dedup ON alert_log(dedup_key);
+CREATE INDEX IF NOT EXISTS idx_alert_sent ON alert_log(sent_at);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 13. macro_indicators: FRED 매크로 경제 지표 시계열
+-- ═══════════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS macro_indicators (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    series_id   TEXT NOT NULL,              -- FRED series ID (e.g. 'DFF', 'UNRATE')
+    date        TEXT NOT NULL,              -- YYYY-MM-DD
+    value       REAL,                       -- 지표 값 (NULL = 결측)
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(series_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_macro_series_date ON macro_indicators(series_id, date);
+
+-- ═══════════════════════════════════════════════════════════════════════════
 -- Seed: default data sources
 -- ═══════════════════════════════════════════════════════════════════════════
 INSERT OR IGNORE INTO data_sources (name, source_type, description) VALUES
     ('yfinance', 'market', 'Yahoo Finance market data via yfinance Python library'),
     ('websearch', 'news', 'Web search results for financial news and analysis'),
-    ('manual', 'manual', 'Manually entered data or analysis');
+    ('manual', 'manual', 'Manually entered data or analysis'),
+    ('fred', 'macro', 'Federal Reserve Economic Data (FRED) API');
 
 -- Seed: default themes
 INSERT OR IGNORE INTO themes (category, name, description, keywords) VALUES

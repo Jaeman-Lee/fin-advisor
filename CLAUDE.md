@@ -22,6 +22,21 @@ python scripts/collect_market_data.py --asset-type stock --days 90
 # 전체 수집 + 기술적 지표
 python scripts/collect_market_data.py --days 90 --indicators
 
+# FRED 매크로 데이터 수집 (전체, 3년)
+FRED_API_KEY=xxx python scripts/collect_fred_data.py
+
+# FRED 카테고리별 수집
+FRED_API_KEY=xxx python scripts/collect_fred_data.py --category inflation --years 5
+
+# FRED 매크로 대시보드 조회
+python scripts/collect_fred_data.py --dashboard
+
+# 시장 모니터링 (dry-run)
+python scripts/run_monitor.py --dry-run
+
+# 시장 모니터링 (텔레그램 전송)
+TELEGRAM_BOT_TOKEN=xxx TELEGRAM_CHAT_ID=yyy python scripts/run_monitor.py
+
 # 테스트 실행
 pytest tests/ -v
 ```
@@ -35,6 +50,7 @@ src/
   processing/              # 데이터 처리 (감성, 관련성, 나비효과)
   database/                # DB 레이어 (스키마, CRUD, 쿼리, NL→SQL)
   analysis/                # 분석 (트렌드, 리스크, 배분, 교차테마)
+  monitoring/              # 시장 모니터링 + 텔레그램 알림
 scripts/                   # CLI 도구
 tests/                     # pytest 테스트
 .claude/agents/            # 에이전트 정의
@@ -43,7 +59,7 @@ data/investment.db         # SQLite 데이터베이스
 
 ## Database
 
-SQLite DB with 11 tables:
+SQLite DB with 13 tables:
 - `asset_registry`: 추적 자산 마스터 (주식/채권/원자재/암호화폐/FX)
 - `market_data`: OHLCV + 기술적 지표 (RSI, MACD, Bollinger, SMA)
 - `raw_data_items`: 수집된 원본 데이터
@@ -54,6 +70,8 @@ SQLite DB with 11 tables:
 - `advisory_reports`: 자문 보고서 이력
 - `data_sources`: 데이터 소스 추적
 - `portfolio_trades`: 실매매 거래 기록 (매수/매도, 분할매수 회차, 전략명)
+- `alert_log`: 알림 전송 이력 (중복 방지용 dedup_key)
+- `macro_indicators`: FRED 매크로 경제 지표 시계열 (series_id + date)
 
 ## Journals & Reports
 
@@ -71,4 +89,27 @@ SQLite DB with 11 tables:
 
 ## Dependencies
 
-`requirements.txt` 참조. 핵심: yfinance, pandas, pandas-ta, nltk, beautifulsoup4
+`requirements.txt` 참조. 핵심: yfinance, pandas, pandas-ta, nltk, beautifulsoup4, requests
+
+## FRED API
+
+23개 시리즈 수집 (금리, 인플레이션, 고용, GDP, 금융환경, 주거, 심리, 통화).
+환경변수: `FRED_API_KEY` (무료: https://fred.stlouisfed.org/docs/api/api_key.html)
+
+## Market Monitor
+
+자동 시장 모니터링 + 텔레그램 알림 시스템 (`src/monitoring/`).
+
+9종 알림: RSI 과매도/과매수, 일일 가격 급변, MACD 크로스, 골든/데드 크로스, 볼린저 스퀴즈, 포트폴리오 P&L, 분할매수 트리거, 시간 트리거, 리스크 상승.
+
+```bash
+# Cron 등록 (하루 6회, 평일)
+# 08:00 ET / 10:00 ET / 12:00 ET / 16:30 ET / 19:00 ET / 23:00 ET (매일)
+crontab -e
+0 8,10,12 * * 1-5 cd /data/claude/fin_advisor && python scripts/run_monitor.py
+30 16 * * 1-5 cd /data/claude/fin_advisor && python scripts/run_monitor.py
+0 19 * * 1-5 cd /data/claude/fin_advisor && python scripts/run_monitor.py
+0 23 * * * cd /data/claude/fin_advisor && python scripts/run_monitor.py
+```
+
+환경변수: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`

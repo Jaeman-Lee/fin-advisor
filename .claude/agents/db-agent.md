@@ -77,6 +77,7 @@ result = db.execute_readonly('''
 | `butterfly_chains` | trigger_event, final_impact, confidence |
 | `advisory_reports` | report_type, title, recommendations (JSON), risk_assessment |
 | `portfolio_trades` | asset_id, trade_date, action (buy/sell), quantity, price, total_cost, tranche, strategy |
+| `alert_log` | dedup_key, category, ticker, priority (INFO/WARNING/CRITICAL), message, sent_at, expires_at |
 
 ### Portfolio Queries
 ```python
@@ -95,6 +96,28 @@ db.execute_readonly('''
     JOIN asset_registry a ON t.asset_id = a.id
     WHERE t.action = 'buy'
 ''')
+```
+
+### Alert Log Queries
+```python
+# 최근 전송된 알림 조회
+db.execute_readonly('''
+    SELECT dedup_key, category, ticker, priority, message, sent_at
+    FROM alert_log
+    ORDER BY sent_at DESC
+    LIMIT 20
+''')
+
+# 특정 종목 알림 이력
+db.execute_readonly('''
+    SELECT category, priority, message, sent_at
+    FROM alert_log
+    WHERE ticker = 'GOOGL'
+    ORDER BY sent_at DESC
+''')
+
+# 중복 체크
+db.is_alert_duplicate('rsi:GOOGL:oversold:2026-02-20')
 ```
 
 ## Response Format

@@ -389,6 +389,104 @@ class DatabaseOperations:
             rows = conn.execute(query, params).fetchall()
             return [dict(r) for r in rows]
 
+    # ── Alert Log ─────────────────────────────────────────────────────────
+
+    def log_alert(self, dedup_key: str, category: str, message: str,
+                  ticker: str | None = None, priority: str = "INFO",
+                  expires_at: str | None = None) -> int:
+        with self._conn() as conn:
+            cur = conn.execute(
+                """INSERT INTO alert_log
+                   (dedup_key, category, ticker, priority, message, expires_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (dedup_key, category, ticker, priority, message, expires_at),
+            )
+            return cur.lastrowid
+
+    def is_alert_duplicate(self, dedup_key: str, hours: int = 24) -> bool:
+        """Check if an alert with the same dedup_key was sent within `hours`.
+
+        If the alert has expires_at=NULL (permanent), it's always a duplicate.
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                """SELECT 1 FROM alert_log
+                   WHERE dedup_key = ?
+                     AND (expires_at IS NULL
+                          OR sent_at >= datetime('now', ?))
+                   LIMIT 1""",
+                (dedup_key, f"-{hours} hours"),
+            ).fetchone()
+            return row is not None
+
+    # ── Macro Indicators (FRED) ────────────────────────────────────────────
+
+    def upsert_macro_indicator(self, series_id: str, date: str,
+                               value: float | None) -> int:
+        with self._conn() as conn:
+            cur = conn.execute(
+                """INSERT INTO macro_indicators (series_id, date, value)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(series_id, date) DO UPDATE SET
+                     value=excluded.value,
+                     updated_at=datetime('now')""",
+                (series_id, date, value),
+            )
+            return cur.lastrowid
+
+    def get_macro_series(self, series_id: str, start_date: str | None = None,
+                         end_date: str | None = None,
+                         limit: int = 1000) -> list[dict]:
+        with self._conn() as conn:
+            query = "SELECT * FROM macro_indicators WHERE series_id = ?"
+            params: list = [series_id]
+            if start_date:
+                query += " AND date >= ?"
+                params.append(start_date)
+            if end_date:
+                query += " AND date <= ?"
+                params.append(end_date)
+            query += " ORDER BY date DESC LIMIT ?"
+            params.append(limit)
+            rows = conn.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_latest_macro_value(self, series_id: str) -> dict | None:
+        with self._conn() as conn:
+            row = conn.execute(
+                """SELECT * FROM macro_indicators
+                   WHERE series_id = ? AND value IS NOT NULL
+                   ORDER BY date DESC LIMIT 1""",
+                (series_id,),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_macro_snapshot(self, series_ids: list[str] | None = None) -> list[dict]:
+        """Get the latest value for each series (or specified subset)."""
+        with self._conn() as conn:
+            if series_ids:
+                placeholders = ",".join("?" for _ in series_ids)
+                rows = conn.execute(
+                    f"""SELECT m.* FROM macro_indicators m
+                        INNER JOIN (
+                            SELECT series_id, MAX(date) as max_date
+                            FROM macro_indicators
+                            WHERE series_id IN ({placeholders}) AND value IS NOT NULL
+                            GROUP BY series_id
+                        ) latest ON m.series_id = latest.series_id AND m.date = latest.max_date""",
+                    series_ids,
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """SELECT m.* FROM macro_indicators m
+                       INNER JOIN (
+                           SELECT series_id, MAX(date) as max_date
+                           FROM macro_indicators WHERE value IS NOT NULL
+                           GROUP BY series_id
+                       ) latest ON m.series_id = latest.series_id AND m.date = latest.max_date"""
+                ).fetchall()
+            return [dict(r) for r in rows]
+
     # ── Generic Query ──────────────────────────────────────────────────────
 
     def execute_readonly(self, sql: str, params: tuple = ()) -> list[dict]:

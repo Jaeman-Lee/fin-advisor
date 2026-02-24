@@ -189,13 +189,63 @@ for p in db.get_open_positions():
 | `butterfly_chains` | causal chain events with confidence |
 | `advisory_reports` | generated report history |
 | `portfolio_trades` | 실매매 기록 (action, quantity, price, tranche, strategy) |
+| `alert_log` | 알림 전송 이력 (dedup_key, category, priority, sent_at) |
+
+## Market Monitoring
+
+자동 시장 모니터링 + 텔레그램 알림 시스템 (`src/monitoring/`).
+
+### 실행
+```bash
+# Dry-run (알림 체크만, 전송 안 함)
+python scripts/run_monitor.py --dry-run
+
+# 전체 실행 (데이터 갱신 + 알림 체크 + 텔레그램 전송)
+python scripts/run_monitor.py
+
+# 특정 종목만
+python scripts/run_monitor.py --ticker GOOGL AMZN
+
+# 데이터 갱신 생략
+python scripts/run_monitor.py --skip-refresh
+
+# 중복 무시 (모든 알림 전송)
+python scripts/run_monitor.py --force
+```
+
+### 9종 알림
+| 카테고리 | 트리거 | 우선순위 |
+|----------|--------|:--------:|
+| RSI 과매도/과매수 | RSI ≤ 30 or ≥ 70 | WARNING |
+| 일일 가격 급변 | \|일변동\| ≥ 3% (5% CRITICAL) | WARNING/CRITICAL |
+| MACD 크로스 | 강세/약세 크로스오버 | INFO/WARNING |
+| 골든/데드 크로스 | SMA50 vs SMA200 교차 | INFO/WARNING |
+| 볼린저 스퀴즈 | 밴드폭 < 0.05 | INFO |
+| 포트폴리오 P&L | -5% 손실 or +10% 이익 | CRITICAL/INFO |
+| 분할매수 트리거 | 2차/3차 조건 충족 | CRITICAL |
+| 시간 트리거 | 기한 도래 (3/6, 3/20) | CRITICAL |
+| 리스크 상승 | risk score ≥ 0.7 | WARNING |
+
+### 모니터링 모듈
+| 모듈 | 역할 |
+|------|------|
+| `alert_types.py` | Alert 데이터클래스, AlertPriority/AlertCategory enum |
+| `config.py` | 분할매수 전략 정의 (ACTIVE_STRATEGY) |
+| `market_monitor.py` | 7종 시장 알림 체크 |
+| `split_buy_monitor.py` | 분할매수 트리거 평가 |
+| `dedup.py` | 알림 중복 방지 (24시간 or 영구) |
+| `telegram_sender.py` | 텔레그램 HTML 포맷 + 전송 |
+
+### 환경변수
+- `TELEGRAM_BOT_TOKEN`: 텔레그램 봇 토큰
+- `TELEGRAM_CHAT_ID`: 알림 받을 채팅 ID
 
 ## Key Documents
 | File | Purpose |
 |------|---------|
 | `20260220_advisor.md` | 최신 투자 자문 보고서 (실행 기록 포함) |
 | `journals/20260220_investment_journal.md` | 투자 일지 (분석→결정→실행 전 과정) |
-| `journals/20260220_status.md` | 에이전트 핸드오프 문서 (미완료 작업 포함) |
+| `journals/20260220_status.md` | 에이전트 핸드오프 문서 |
 
 # Persistent Agent Memory
 

@@ -1,4 +1,4 @@
-.PHONY: install init collect test dashboard docker-up docker-down clean
+.PHONY: install init collect test dashboard monitor monitor-dry docker-up docker-down clean
 
 # Install all dependencies
 install:
@@ -34,6 +34,14 @@ docker-up:
 
 docker-down:
 	docker compose down
+
+# Run market monitor (full: refresh + check + send)
+monitor:
+	python scripts/run_monitor.py
+
+# Run market monitor (dry run: check + print only)
+monitor-dry:
+	python scripts/run_monitor.py --dry-run
 
 # Remove generated files
 clean:

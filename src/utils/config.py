@@ -117,3 +117,55 @@ ALLOCATION_BOUNDS = {
     "fx": (0.0, 0.10),
     "cash": (0.05, 1.0),  # minimum 5% cash
 }
+
+# ── Monitoring Thresholds ────────────────────────────────────────────────
+MONITOR_RSI_OVERSOLD = 30          # RSI ≤ this → 과매도 alert
+MONITOR_RSI_OVERBOUGHT = 70        # RSI ≥ this → 과매수 alert
+MONITOR_PRICE_CHANGE_WARN = 3.0    # |일변동| ≥ 3% → WARNING
+MONITOR_PRICE_CHANGE_CRITICAL = 5.0  # |일변동| ≥ 5% → CRITICAL
+MONITOR_BOLLINGER_SQUEEZE_BW = 0.05  # 밴드폭 < 0.05 → squeeze
+MONITOR_RISK_THRESHOLD = 0.7        # risk score ≥ 0.7 → alert
+MONITOR_PNL_LOSS_THRESHOLD = 5.0    # 포지션 -5% → CRITICAL
+MONITOR_PNL_GAIN_THRESHOLD = 10.0   # 포지션 +10% → INFO
+
+# ── FRED API ─────────────────────────────────────────────────────────────
+_fred_key_file = PROJECT_ROOT / "fred_api_key"
+FRED_API_KEY = os.getenv("FRED_API_KEY", "") or (
+    _fred_key_file.read_text().strip() if _fred_key_file.exists() else ""
+)
+FRED_BASE_URL = "https://api.stlouisfed.org/fred"
+
+# FRED 시리즈 정의: {series_id: (name, category, frequency)}
+FRED_SERIES = {
+    # 금리 & 연준
+    "DFF":      ("Federal Funds Effective Rate",    "interest_rate", "daily"),
+    "DGS2":     ("2-Year Treasury Rate",            "interest_rate", "daily"),
+    "DGS10":    ("10-Year Treasury Rate",           "interest_rate", "daily"),
+    "DGS30":    ("30-Year Treasury Rate",           "interest_rate", "daily"),
+    "T10Y2Y":   ("10Y-2Y Treasury Spread",          "yield_curve",   "daily"),
+    "T10Y3M":   ("10Y-3M Treasury Spread",          "yield_curve",   "daily"),
+    # 인플레이션
+    "CPIAUCSL": ("CPI All Urban Consumers",         "inflation",     "monthly"),
+    "CPILFESL": ("Core CPI (Less Food & Energy)",   "inflation",     "monthly"),
+    "PCEPILFE": ("Core PCE Price Index",            "inflation",     "monthly"),
+    "T5YIE":    ("5-Year Breakeven Inflation",      "inflation",     "daily"),
+    "T10YIE":   ("10-Year Breakeven Inflation",     "inflation",     "daily"),
+    "MICH":     ("Michigan Inflation Expectations",  "inflation",     "monthly"),
+    # 고용
+    "UNRATE":   ("Unemployment Rate",               "employment",    "monthly"),
+    "PAYEMS":   ("Total Nonfarm Payrolls",          "employment",    "monthly"),
+    "ICSA":     ("Initial Jobless Claims",          "employment",    "weekly"),
+    # GDP & 성장
+    "GDP":      ("Gross Domestic Product",          "growth",        "quarterly"),
+    "GDPC1":    ("Real GDP",                        "growth",        "quarterly"),
+    # 금융 환경
+    "BAMLH0A0HYM2": ("High Yield OAS Spread",      "financial",     "daily"),
+    "DTWEXBGS":     ("Trade Weighted Dollar Index",  "financial",     "daily"),
+    # 주거 & 소비
+    "MORTGAGE30US": ("30-Year Mortgage Rate",       "housing",       "weekly"),
+    "UMCSENT":      ("Michigan Consumer Sentiment",  "sentiment",     "monthly"),
+    # 통화
+    "M2SL":     ("M2 Money Supply",                 "monetary",      "monthly"),
+}
+
+FRED_DEFAULT_LOOKBACK_YEARS = 3
