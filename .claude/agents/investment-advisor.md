@@ -240,6 +240,30 @@ python scripts/run_monitor.py --force
 - `TELEGRAM_BOT_TOKEN`: 텔레그램 봇 토큰
 - `TELEGRAM_CHAT_ID`: 알림 받을 채팅 ID
 
+## Korean Market Analysis Script
+
+독립형 한국 시장 분석 스크립트 (`scripts/analyze_kr_market.py`).
+KOSPI/KOSDAQ 신고가 돌파 시점의 진입 검토용.
+
+```bash
+python scripts/analyze_kr_market.py
+```
+
+### 분석 항목 (9개 섹션)
+| # | 섹션 | 내용 |
+|---|------|------|
+| 1 | KOSPI/KOSDAQ 현황 | 수익률(1D~YTD), 52주 고/저, RSI, MACD, 이동평균 이격도 |
+| 2 | 글로벌 리스크 심리 | VIX, S&P500, NASDAQ, 선물, 금리, 금, 유가 |
+| 3 | 원/달러 환율 | USD/KRW 추이 + 외국인 매수 유인 해석 |
+| 4 | 한국 주요 종목 | 삼성전자, SK하이닉스, LG에너지, NAVER, 카카오, 셀트리온, 신한은행 |
+| 5 | 밸류에이션 | PER, PBR, 배당률, 시총 |
+| 6 | 시장 모멘텀 스코어 | SMA50/200 상회 비율, 평균 RSI, KOSPI 모멘텀 진단 |
+| 7 | 신고가 매수 백테스트 | 5년간 52주 고점 부근 매수 시 1/3/6개월 후 수익률 통계 |
+| 8 | KOSPI-환율 상관관계 | 60일 일간 수익률 상관계수 (외국인 매수 주도 여부) |
+| 9 | 변동성 분석 | KOSPI 연환산 변동성(20/60/252일), VIX 수준 해석 |
+
+특징: `src/` 모듈 미사용, yfinance + pandas_ta 직접 수집·분석하는 독립형 스크립트.
+
 ## Key Documents
 | File | Purpose |
 |------|---------|

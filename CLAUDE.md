@@ -96,6 +96,18 @@ SQLite DB with 13 tables:
 23개 시리즈 수집 (금리, 인플레이션, 고용, GDP, 금융환경, 주거, 심리, 통화).
 환경변수: `FRED_API_KEY` (무료: https://fred.stlouisfed.org/docs/api/api_key.html)
 
+## Korean Market Analysis
+
+독립형 한국 시장 분석 스크립트. KOSPI/KOSDAQ 신고가 돌파 시점 진입 검토용.
+
+```bash
+python scripts/analyze_kr_market.py
+```
+
+9개 섹션 분석: KOSPI/KOSDAQ 현황, 글로벌 리스크 심리, 원/달러 환율, 한국 주요 종목(7종), 밸류에이션, 시장 모멘텀 스코어, 신고가 매수 백테스트(5년), KOSPI-환율 상관관계, 변동성 분석.
+
+`src/` 모듈 미사용, yfinance + pandas_ta 직접 수집·분석하는 독립형 스크립트.
+
 ## Market Monitor
 
 자동 시장 모니터링 + 텔레그램 알림 시스템 (`src/monitoring/`).
