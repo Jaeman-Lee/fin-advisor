@@ -1,0 +1,70 @@
+name: Global Scan (Daytime)
+
+on:
+  schedule:
+    # KST 12:00, 18:00 (= UTC 03:00, 09:00) 월~금
+    - cron: '0 3,9 * * 1-5'
+  workflow_dispatch: # 수동 실행
+
+jobs:
+  global-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install yfinance pandas numpy
+
+      - name: Run global scan
+        id: scan
+        working-directory: scripts
+        run: |
+          set +e
+          python global_scan.py --no-color 2>&1 | tee scan_output.txt
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          python global_scan.py --json > scan_output.json 2>/dev/null || true
+          exit 0
+
+      - name: Send alert email
+        if: steps.scan.outputs.exit_code == '1'
+        env:
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        working-directory: scripts
+        run: |
+          python send_report.py \
+            --subject "⚠ 글로벌 시장 경보 — $(date +%Y-%m-%d %H:%M) UTC" \
+            --body-file scan_output.txt
+
+      - name: Send scan summary
+        if: steps.scan.outputs.exit_code == '0'
+        env:
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        working-directory: scripts
+        run: |
+          python send_report.py \
+            --subject "🌏 Global Scan — $(date +%Y-%m-%d %H:%M) UTC" \
+            --body-file scan_output.txt
+
+      - name: Upload scan result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: global-scan-${{ github.run_number }}
+          path: scripts/scan_output.*
+          retention-days: 7
