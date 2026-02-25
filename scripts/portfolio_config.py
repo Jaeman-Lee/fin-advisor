@@ -12,14 +12,36 @@ from datetime import date, datetime
 # Portfolio Constants
 # ──────────────────────────────────────────────────────────────
 
+# Split-Buy Strategy positions (actively monitored with triggers)
 POSITIONS = {
-    "GOOGL": {"shares": 3, "avg_price": 302.85, "buy_date": "2026-02-20"},
-    "AMZN":  {"shares": 4, "avg_price": 204.86, "buy_date": "2026-02-20"},
-    "MSFT":  {"shares": 2, "avg_price": 398.46, "buy_date": "2026-02-20"},
+    "GOOGL": {"shares": 3, "avg_price": 307.61, "buy_date": "2026-02-20"},
+    "AMZN":  {"shares": 4, "avg_price": 205.59, "buy_date": "2026-02-20"},
+    "MSFT":  {"shares": 2, "avg_price": 399.69, "buy_date": "2026-02-20"},
 }
 
 HELD_TICKERS = list(POSITIONS.keys())  # ["GOOGL", "AMZN", "MSFT"]
 MARKET_TICKERS = ["^GSPC", "^VIX"]
+
+# ──────────────────────────────────────────────────────────────
+# Full Portfolio — 전체 보유 자산 (2026-02-25 기준)
+# ──────────────────────────────────────────────────────────────
+
+ALL_POSITIONS = {
+    # US Stocks
+    "GOOGL":    {"shares": 3,  "avg_price": 307.61,  "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
+    "AMZN":     {"shares": 4,  "avg_price": 205.59,  "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
+    "MSFT":     {"shares": 2,  "avg_price": 399.69,  "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
+    "ACRE":     {"shares": 15, "avg_price": 8.69,    "currency": "USD", "strategy": "인컴/배당", "buy_date": "2025-01-01"},
+    "BRK-B":    {"shares": 6,  "avg_price": 502.03,  "currency": "USD", "strategy": "가치투자", "buy_date": "2025-01-01"},
+    # Korean Stocks
+    "451800.KS": {"shares": 18, "avg_price": 5350,   "currency": "KRW", "strategy": "리츠/배당", "buy_date": "2025-01-01", "name": "한화리츠"},
+}
+
+# Non-stock assets
+GOLD_POSITION = {"qty_grams": 18, "avg_price_krw": 227431, "currency": "KRW"}
+CASH_BALANCES = {"USD": 3604.59, "KRW": 7046698}
+
+ALL_TICKERS = list(ALL_POSITIONS.keys())
 
 # ──────────────────────────────────────────────────────────────
 # Watchlist — 관심종목 (보유하지 않지만 모니터링 + 투자 조언)
@@ -42,9 +64,9 @@ WATCHLIST = {
 
 WATCHLIST_TICKERS = list(WATCHLIST.keys())
 
-TOTAL_CAPITAL = 6151.00
-INVESTED = 2524.91
-REMAINING = 3626.09
+TOTAL_CAPITAL = 6151.00       # US빅테크과매도 전략 예산 (USD)
+INVESTED = 2544.94            # 1차 트랜치 실투자 (USD)
+REMAINING = 3604.59           # 잔여 USD 현금
 
 # ──────────────────────────────────────────────────────────────
 # Tranche 2 Triggers (any one fires → execute 2nd buy)
