@@ -37,6 +37,8 @@ from portfolio_config import (
     TOTAL_CAPITAL,
     TRANCHE_2_TRADES,
     TRANCHE_3_TRADES,
+    WATCHLIST,
+    WATCHLIST_TICKERS,
     Colors,
     check_tranche_2_triggers,
     check_tranche_3_triggers,
@@ -192,6 +194,130 @@ def get_held_stock_indicators(db: DatabaseOperations) -> dict:
     }
 
 
+def get_watchlist_indicators(db: DatabaseOperations) -> dict[str, dict]:
+    """Fetch latest technical indicators for watchlist tickers from DB.
+
+    Returns {ticker: {price, rsi, macd, macd_signal, macd_hist, sma_20, sma_50, sma_200,
+                      pct_from_sma20, pct_from_sma50, pct_from_sma200, date}}
+    """
+    results = {}
+    for ticker in WATCHLIST_TICKERS:
+        asset_id = db.get_asset_id(ticker)
+        if asset_id is None:
+            logger.warning(f"Watchlist asset {ticker} not found in DB")
+            continue
+
+        rows = db.get_market_data(asset_id, limit=2)
+        if not rows:
+            logger.warning(f"No market data for watchlist {ticker}")
+            continue
+
+        latest = rows[0]
+        prev = rows[1] if len(rows) >= 2 else None
+        close = latest.get("close") or latest.get("adj_close")
+        if close is None:
+            continue
+
+        close = float(close)
+        info = {"price": close, "date": latest.get("date", "")}
+
+        # RSI
+        rsi = latest.get("rsi_14")
+        info["rsi"] = float(rsi) if rsi is not None else None
+
+        # MACD
+        for key in ("macd", "macd_signal", "macd_hist"):
+            val = latest.get(key)
+            info[key] = float(val) if val is not None else None
+
+        # MACD previous (for golden cross detection)
+        if prev is not None:
+            prev_macd = prev.get("macd")
+            prev_signal = prev.get("macd_signal")
+            info["prev_macd"] = float(prev_macd) if prev_macd is not None else None
+            info["prev_signal"] = float(prev_signal) if prev_signal is not None else None
+
+            # Golden cross check
+            if all(v is not None for v in [info.get("macd"), info.get("macd_signal"),
+                                            info.get("prev_macd"), info.get("prev_signal")]):
+                info["macd_golden_cross"] = (
+                    info["prev_macd"] <= info["prev_signal"] and info["macd"] > info["macd_signal"]
+                )
+            else:
+                info["macd_golden_cross"] = False
+        else:
+            info["prev_macd"] = None
+            info["prev_signal"] = None
+            info["macd_golden_cross"] = False
+
+        # SMAs + distance
+        for period in [20, 50, 200]:
+            sma_key = f"sma_{period}"
+            val = latest.get(sma_key)
+            if val is not None:
+                sma_val = float(val)
+                info[sma_key] = sma_val
+                info[f"pct_from_sma_{period}"] = (close / sma_val - 1) * 100
+            else:
+                info[sma_key] = None
+                info[f"pct_from_sma_{period}"] = None
+
+        # Bollinger
+        bb_lower = latest.get("bb_lower")
+        bb_upper = latest.get("bb_upper")
+        info["bb_lower"] = float(bb_lower) if bb_lower is not None else None
+        info["bb_upper"] = float(bb_upper) if bb_upper is not None else None
+
+        results[ticker] = info
+
+    return results
+
+
+def assess_watchlist_entry(ticker: str, indicators: dict) -> dict:
+    """Assess whether entry conditions are met for a watchlist ticker.
+
+    Returns {ready: bool, met: [str], unmet: [str], advice: str}
+    """
+    config = WATCHLIST.get(ticker, {})
+    conditions = config.get("entry_conditions", {})
+    met = []
+    unmet = []
+
+    # RSI recovery
+    rsi_target = conditions.get("rsi_above")
+    rsi = indicators.get("rsi")
+    if rsi_target is not None and rsi is not None:
+        if rsi >= rsi_target:
+            met.append(f"RSI {rsi:.1f} >= {rsi_target}")
+        else:
+            unmet.append(f"RSI {rsi:.1f} < {rsi_target}")
+
+    # MACD golden cross
+    if conditions.get("macd_golden_cross"):
+        if indicators.get("macd_golden_cross"):
+            met.append("MACD 골든크로스")
+        else:
+            hist = indicators.get("macd_hist")
+            hist_str = f" (hist: {hist:.2f})" if hist is not None else ""
+            unmet.append(f"MACD 골든크로스 미달성{hist_str}")
+
+    # Regulatory clear (manual — always unmet unless overridden)
+    if conditions.get("regulatory_clear"):
+        unmet.append("규제 리스크 완화 미확인 (수동 판단)")
+
+    ready = len(unmet) == 0 and len(met) > 0
+
+    # Build advice
+    if ready:
+        advice = "진입 조건 충족 — 매수 검토 가능"
+    elif len(met) > 0:
+        advice = f"부분 충족 ({len(met)}/{len(met)+len(unmet)}) — 추가 조건 대기"
+    else:
+        advice = "진입 조건 미충족 — 관망 유지"
+
+    return {"ready": ready, "met": met, "unmet": unmet, "advice": advice}
+
+
 def get_market_overview(db: DatabaseOperations) -> dict:
     """Get S&P 500 and VIX latest data."""
     overview = {}
@@ -268,6 +394,7 @@ def generate_markdown_report(
     trend_signals: dict,
     risk_data: dict,
     butterfly_chains: list[dict],
+    watchlist_data: dict | None = None,
 ) -> str:
     """Generate markdown daily report."""
     lines = []
@@ -393,6 +520,51 @@ def generate_markdown_report(
                 lines.append(f"```\n{detail}\n```")
             lines.append("")
 
+    # Watchlist
+    if watchlist_data:
+        lines.append("## Watchlist (관심종목)")
+        lines.append("")
+        for ticker, ind in watchlist_data.items():
+            config = WATCHLIST.get(ticker, {})
+            assessment = assess_watchlist_entry(ticker, ind)
+            name = config.get("name", ticker)
+
+            lines.append(f"### {name} ({ticker})")
+            lines.append("")
+            lines.append(f"**투자 테시스**: {config.get('thesis', 'N/A')}")
+            lines.append("")
+
+            # Price & technicals table
+            lines.append("| 지표 | 값 |")
+            lines.append("|------|-----|")
+            lines.append(f"| 현재가 | ${ind['price']:,.2f} |")
+            rsi = ind.get("rsi")
+            lines.append(f"| RSI(14) | {rsi:.1f} |" if rsi is not None else "| RSI(14) | N/A |")
+            macd_h = ind.get("macd_hist")
+            lines.append(f"| MACD Hist | {macd_h:.2f} |" if macd_h is not None else "| MACD Hist | N/A |")
+            for period in [20, 50, 200]:
+                pct = ind.get(f"pct_from_sma_{period}")
+                if pct is not None:
+                    lines.append(f"| SMA{period} 대비 | {pct:+.1f}% |")
+            lines.append("")
+
+            # Entry conditions
+            lines.append("**진입 조건 평가:**")
+            lines.append("")
+            for item in assessment["met"]:
+                lines.append(f"- ✓ {item}")
+            for item in assessment["unmet"]:
+                lines.append(f"- ✗ {item}")
+            lines.append("")
+            lines.append(f"**→ {assessment['advice']}**")
+            lines.append("")
+
+            # Risk factors
+            risks = config.get("risk_factors", [])
+            if risks:
+                lines.append(f"**리스크**: {', '.join(risks)}")
+                lines.append("")
+
     # Disclaimer
     lines.append("---")
     lines.append("")
@@ -410,6 +582,7 @@ def format_terminal_summary(
     t3_result,
     risk_data: dict,
     report_path: str | None,
+    watchlist_data: dict | None = None,
 ) -> str:
     """Format concise terminal summary."""
     C = Colors
@@ -517,6 +690,31 @@ def format_terminal_summary(
         rc = C.RED if score > 0.6 else C.YELLOW if score > 0.4 else C.GREEN
         lines.append(f"\n {C.DIM}Market Risk:{C.RESET} {rc}{overall} ({score:.2f}){C.RESET}")
 
+    # Watchlist
+    if watchlist_data:
+        lines.append(f"\n{THIN}")
+        lines.append(f" {C.BOLD}WATCHLIST{C.RESET}")
+        for ticker, ind in watchlist_data.items():
+            config = WATCHLIST.get(ticker, {})
+            assessment = assess_watchlist_entry(ticker, ind)
+            name = config.get("name", ticker)
+            rsi = ind.get("rsi")
+            rsi_str = f"RSI {rsi:.0f}" if rsi is not None else "RSI N/A"
+            macd_h = ind.get("macd_hist")
+            macd_str = f"MACD {macd_h:+.1f}" if macd_h is not None else ""
+            pct_50 = ind.get("pct_from_sma_50")
+            sma_str = f"SMA50 {pct_50:+.0f}%" if pct_50 is not None else ""
+
+            met_cnt = len(assessment["met"])
+            total_cnt = met_cnt + len(assessment["unmet"])
+            status_c = C.GREEN if assessment["ready"] else C.YELLOW if met_cnt > 0 else C.DIM
+            status = f"{met_cnt}/{total_cnt}"
+
+            lines.append(
+                f" {name:<8} ${ind['price']:>9,.2f}  {rsi_str}  {macd_str}  {sma_str}"
+                f"  {status_c}[{status}]{C.RESET} {assessment['advice']}"
+            )
+
     # Report path
     if report_path:
         lines.append(f"\n {C.DIM}Report saved: {report_path}{C.RESET}")
@@ -536,6 +734,7 @@ def build_json_output(
     risk_data: dict,
     butterfly_chains: list[dict],
     report_path: str | None,
+    watchlist_data: dict | None = None,
 ) -> dict:
     """Build JSON-serializable output."""
     def serialize_tranche(result):
@@ -573,6 +772,14 @@ def build_json_output(
         ],
         "action_needed": t2_result.any_fired or t3_result.any_fired,
         "report_path": report_path,
+        "watchlist": {
+            ticker: {
+                "name": WATCHLIST.get(ticker, {}).get("name", ticker),
+                "indicators": ind,
+                "assessment": assess_watchlist_entry(ticker, ind),
+            }
+            for ticker, ind in (watchlist_data or {}).items()
+        },
     }
 
 
@@ -650,7 +857,11 @@ def main():
     logger.info("Checking butterfly chains...")
     butterfly_chains = run_butterfly_detection(db)
 
-    # 10. Generate & save markdown report
+    # 10. Watchlist indicators
+    logger.info("Fetching watchlist indicators...")
+    watchlist_data = get_watchlist_indicators(db)
+
+    # 11. Generate & save markdown report
     report_path = None
     try:
         DAILY_LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -659,6 +870,7 @@ def main():
         report_md = generate_markdown_report(
             now, market_overview, pnl_list, indicators,
             t2_result, t3_result, trend_signals, risk_data, butterfly_chains,
+            watchlist_data,
         )
         report_file.write_text(report_md, encoding="utf-8")
         report_path = str(report_file)
@@ -666,18 +878,18 @@ def main():
     except Exception as e:
         logger.warning(f"Failed to save report: {e}")
 
-    # 11. Output
+    # 12. Output
     if args.json:
         output = build_json_output(
             now, market_overview, pnl_list, indicators,
             t2_result, t3_result, trend_signals, risk_data,
-            butterfly_chains, report_path,
+            butterfly_chains, report_path, watchlist_data,
         )
         print(json.dumps(output, indent=2, ensure_ascii=False, default=str))
     else:
         print(format_terminal_summary(
             now, market_overview, pnl_list, indicators,
-            t2_result, t3_result, risk_data, report_path,
+            t2_result, t3_result, risk_data, report_path, watchlist_data,
         ))
 
     # Exit code

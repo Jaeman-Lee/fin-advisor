@@ -96,6 +96,15 @@ SQLite DB with 13 tables:
 23개 시리즈 수집 (금리, 인플레이션, 고용, GDP, 금융환경, 주거, 심리, 통화).
 환경변수: `FRED_API_KEY` (무료: https://fred.stlouisfed.org/docs/api/api_key.html)
 
+## Watchlist (관심종목)
+
+`portfolio_config.py`의 `WATCHLIST` 딕셔너리에 정의. 보유하지 않지만 모니터링 + 투자 조언 대상.
+
+현재 관심종목: SOL-USD (Solana)
+
+Daily Analysis 리포트에 관심종목별 기술 지표 + 진입 조건 평가가 자동 포함됨.
+Global Scan에서도 SOL-USD 가격 추적.
+
 ## Korean Market Analysis
 
 독립형 한국 시장 분석 스크립트. KOSPI/KOSDAQ 신고가 돌파 시점 진입 검토용.

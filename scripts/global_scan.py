@@ -54,6 +54,7 @@ GLOBAL_TICKERS = {
     # Crypto (24/7 sentiment)
     "BTC-USD":  {"name": "Bitcoin",        "group": "crypto"},
     "ETH-USD":  {"name": "Ethereum",       "group": "crypto"},
+    "SOL-USD":  {"name": "Solana",         "group": "crypto"},
     # Safe haven / commodities
     "GC=F":     {"name": "금 선물",         "group": "commodity"},
     "CL=F":     {"name": "원유 WTI",       "group": "commodity"},

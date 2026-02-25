@@ -21,6 +21,27 @@ POSITIONS = {
 HELD_TICKERS = list(POSITIONS.keys())  # ["GOOGL", "AMZN", "MSFT"]
 MARKET_TICKERS = ["^GSPC", "^VIX"]
 
+# ──────────────────────────────────────────────────────────────
+# Watchlist — 관심종목 (보유하지 않지만 모니터링 + 투자 조언)
+# ──────────────────────────────────────────────────────────────
+
+WATCHLIST = {
+    "SOL-USD": {
+        "name": "Solana",
+        "thesis": "Firedancer/Alpenglow 업그레이드 + ETF 생태계 + DeFi TVL 선두",
+        "entry_conditions": {
+            "rsi_above": 45,            # RSI 45 이상 회복 시
+            "macd_golden_cross": True,   # MACD 골든크로스
+            "regulatory_clear": True,    # SEC 규제 리스크 완화
+        },
+        "risk_factors": ["SEC 증권 분류", "집단소송", "고베타 80%+ 드로다운", "네트워크 장애 이력"],
+        "added_date": "2026-02-25",
+        "notes": "RSI 반등 + MACD 크로스 + 규제 완화 확인 전까지 관망",
+    },
+}
+
+WATCHLIST_TICKERS = list(WATCHLIST.keys())
+
 TOTAL_CAPITAL = 6151.00
 INVESTED = 2524.91
 REMAINING = 3626.09
