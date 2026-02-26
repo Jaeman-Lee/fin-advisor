@@ -25,11 +25,41 @@
 
 ## Architecture
 
-4개 에이전트가 협업:
-- **investment-advisor** (Orchestrator): 자산관리 + 투자 자문 + 포트폴리오 설계 총괄
+### Infrastructure Agents (데이터 레이어)
 - **info-collector**: yfinance + WebSearch로 금융/비금융 데이터 수집
 - **data-processor**: 테마 분류, 감성 분석, 나비효과 체인 감지
 - **db-agent**: 자연어→SQL 질의, 데이터 기반 답변 (SELECT only)
+
+### Strategy Debate Agents (의사결정 레이어)
+6명의 전략 전문가가 토론하여 투자 판단:
+
+| Agent | 관점 | 핵심 지표 |
+|-------|------|----------|
+| **value-investor** | 내재가치, 저평가 | P/E, P/B, FCF, 안전마진 |
+| **growth-investor** | 성장성, 혁신 | 매출성장률, PEG, 매출총이익률 |
+| **momentum-trader** | 추세, 기술적 | RSI, MACD, SMA, 볼린저 |
+| **income-investor** | 배당, 현금흐름 | 배당수익률, 배당성향, FCF |
+| **macro-strategist** | 거시경제 | 금리, 수익률곡선, VIX |
+| **risk-manager** | 리스크 관리 (**거부권**) | 낙폭, 집중도, 변동성, 손실이력 |
+
+### Orchestration
+- **debate-moderator**: 토론 주재, 투표 집계, 최종 제안 도출
+- **investment-advisor**: 전체 워크플로우 조율 + 종합 자문
+
+### 토론 → 의사결정 흐름
+```
+데이터 수집 → 6명 독립 분석 → 교차 검증 → 투표
+  → 만장일치: 자동 기록 + 이메일
+  → 다수결: 이메일 제안
+  → 분열/거부권: 텔레그램으로 사용자에게 판단 요청
+```
+
+```bash
+# 토론 실행
+python scripts/run_debate.py                    # 전체 포트폴리오
+python scripts/run_debate.py --ticker GOOGL     # 단일 종목
+python scripts/run_debate.py --dry-run          # 텔레그램 미발송
+```
 
 ## Quick Start
 
