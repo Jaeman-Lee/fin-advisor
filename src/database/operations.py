@@ -487,6 +487,72 @@ class DatabaseOperations:
                 ).fetchall()
             return [dict(r) for r in rows]
 
+    # ── Event Queue ─────────────────────────────────────────────────────────
+
+    def enqueue_event(self, event_type: str, ticker: str | None,
+                      severity: str, payload: str,
+                      description: str | None = None) -> int:
+        with self._conn() as conn:
+            cur = conn.execute(
+                """INSERT INTO event_queue
+                   (event_type, ticker, severity, payload, description)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (event_type, ticker, severity, payload, description),
+            )
+            return cur.lastrowid
+
+    def get_pending_events(self, limit: int = 50) -> list[dict]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                """SELECT * FROM event_queue
+                   WHERE processed = 0
+                   ORDER BY detected_at ASC
+                   LIMIT ?""",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def mark_event_processed(self, event_id: int, result: str) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                """UPDATE event_queue
+                   SET processed = 1, processed_at = datetime('now'),
+                       processor_result = ?
+                   WHERE id = ?""",
+                (result, event_id),
+            )
+
+    def mark_event_skipped(self, event_id: int, reason: str) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                """UPDATE event_queue
+                   SET processed = 2, processed_at = datetime('now'),
+                       processor_result = ?
+                   WHERE id = ?""",
+                (reason, event_id),
+            )
+
+    def is_event_duplicate(self, event_type: str, ticker: str | None,
+                           hours: int = 6) -> bool:
+        with self._conn() as conn:
+            if ticker:
+                row = conn.execute(
+                    """SELECT 1 FROM event_queue
+                       WHERE event_type = ? AND ticker = ?
+                         AND detected_at >= datetime('now', ?)
+                       LIMIT 1""",
+                    (event_type, ticker, f"-{hours} hours"),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    """SELECT 1 FROM event_queue
+                       WHERE event_type = ? AND ticker IS NULL
+                         AND detected_at >= datetime('now', ?)
+                       LIMIT 1""",
+                    (event_type, f"-{hours} hours"),
+                ).fetchone()
+            return row is not None
+
     # ── Generic Query ──────────────────────────────────────────────────────
 
     def execute_readonly(self, sql: str, params: tuple = ()) -> list[dict]:

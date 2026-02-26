@@ -237,6 +237,25 @@ CREATE TABLE IF NOT EXISTS macro_indicators (
 CREATE INDEX IF NOT EXISTS idx_macro_series_date ON macro_indicators(series_id, date);
 
 -- ═══════════════════════════════════════════════════════════════════════════
+-- 14. event_queue: 이벤트 드리븐 파이프라인 이벤트 큐
+-- ═══════════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS event_queue (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type      TEXT NOT NULL,           -- 'price_spike', 'rsi_zone', 'macd_cross', 'vix_spike', 'split_buy_trigger'
+    ticker          TEXT,                    -- NULL for market-wide events
+    severity        TEXT NOT NULL,           -- 'info', 'warning', 'critical'
+    payload         TEXT NOT NULL,           -- JSON
+    description     TEXT,                    -- human-readable summary
+    detected_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    processed       INTEGER NOT NULL DEFAULT 0,  -- 0=pending, 1=processed, 2=skipped
+    processed_at    TEXT,
+    processor_result TEXT                    -- JSON: debate result, action taken, etc.
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_pending ON event_queue(processed, detected_at);
+CREATE INDEX IF NOT EXISTS idx_event_type ON event_queue(event_type, ticker);
+
+-- ═══════════════════════════════════════════════════════════════════════════
 -- Seed: default data sources
 -- ═══════════════════════════════════════════════════════════════════════════
 INSERT OR IGNORE INTO data_sources (name, source_type, description) VALUES

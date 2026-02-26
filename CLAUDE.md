@@ -99,6 +99,7 @@ src/
   database/                # DB 레이어 (스키마, CRUD, 쿼리, NL→SQL)
   analysis/                # 분석 (트렌드, 리스크, 배분, 교차테마)
   monitoring/              # 시장 모니터링 + 텔레그램 알림
+  pipeline/                # 이벤트 드리븐 파이프라인 (change_detector, event_triage, event_store)
 scripts/
   portfolio_config.py      # 전체 보유자산 + 전략 + 트리거 설정
   daily_analysis.py        # 일일 분석 리포트 (Track B)
@@ -125,7 +126,6 @@ data/investment.db         # SQLite 데이터베이스
 |------|------|------|
 | US 주식 | GOOGL, AMZN, MSFT | US빅테크과매도 (분할매수) |
 | US 주식 | BRK-B | 가치투자 |
-| US 주식 | ACRE | 인컴/배당 |
 | KR 주식 | 한화리츠 (451800.KS) | 리츠/배당 |
 | 원자재 | KRX 금 18g | 안전자산 |
 | 현금 | USD + KRW | |
@@ -137,7 +137,8 @@ data/investment.db         # SQLite 데이터베이스
 | 진원생명과학 | -1,224,816원 (-40.0%) |
 | 카메코 (CCJ) | -334,936원 (-6.1%) |
 | 팔란티어 (PLTR) | -1,278,045원 (-12.7%) |
-| **합계** | **-2,837,797원** |
+| ACRE | -77,220원 (-41.4%) |
+| **합계** | **-2,915,017원** |
 
 ### Config 구조
 
@@ -210,42 +211,56 @@ Daily Analysis + Global Scan에서 자동 추적.
 
 ## Service 3: Market Monitoring (시장 모니터링)
 
-`src/monitoring/` + 3개 배치 스크립트.
+### 2-Layer Event-Driven Pipeline
 
-### 알림 채널
-- **텔레그램**: 실시간 알림 (9종)
-- **이메일**: 정기 리포트 (GitHub Actions)
+```
+Layer 1: 데이터 수집 (15~30분)     Layer 2: 판단 (이벤트 드리븐)
+┌─────────────────────────┐     ┌──────────────────────────┐
+│ • 가격 OHLCV 수집       │     │ • 이벤트 분류 (Triage)    │
+│ • 기술적 지표 갱신       │ ──→ │ • 토론 실행 (6 agents)    │
+│ • 변화 감지 (Detector)   │     │ • 텔레그램/이메일 알림    │
+│ • event_queue에 적재     │     │ • 저널 기록              │
+└─────────────────────────┘     └──────────────────────────┘
+```
 
-### 9종 알림
+```bash
+# 이벤트 파이프라인 실행
+python scripts/event_collector.py                    # 전체 사이클 (L1+L2)
+python scripts/event_collector.py --dry-run          # 감지만, 알림 미발송
+python scripts/event_collector.py --detect-only      # Layer 1만 (이벤트 적재)
+```
 
-| 카테고리 | 트리거 | 우선순위 |
-|----------|--------|:--------:|
-| RSI 과매도/과매수 | RSI ≤ 30 or ≥ 70 | WARNING |
-| 일일 가격 급변 | ≥ 3% (5% CRITICAL) | WARNING/CRITICAL |
-| MACD 크로스 | 강세/약세 교차 | INFO/WARNING |
-| 골든/데드 크로스 | SMA50 vs SMA200 | INFO/WARNING |
-| 볼린저 스퀴즈 | 밴드폭 < 0.05 | INFO |
-| 포트폴리오 P&L | -5% 손실 or +10% 이익 | CRITICAL/INFO |
-| 분할매수 트리거 | 2차/3차 조건 충족 | CRITICAL |
-| 시간 트리거 | 기한 도래 | CRITICAL |
-| 리스크 상승 | risk score ≥ 0.7 | WARNING |
+### 변화 감지 기준
+
+| 이벤트 | 임계값 | 보유종목 → | 비보유 → |
+|--------|--------|-----------|---------|
+| 가격 급변 | ≥3% (5% CRITICAL) | debate / alert | alert / log |
+| RSI 존 진입 | ≤30 or ≥70 | debate | alert |
+| MACD 크로스 | 골든/데드 | debate(데드) / alert(골든) | alert / log |
+| VIX 급등 | ≥25(경고) ≥30(위험) | alert / debate(전체) | — |
+| 분할매수 트리거 | 기존 조건 | debate + alert | — |
 
 ### 배치 스케줄
 
 | 배치 | 주기 | 내용 |
 |------|------|------|
-| daily_analysis | KST 07:00 | 포트폴리오 P&L + 시장 분석 + 관심종목 |
-| quick_scan | KST 0/2/4/6시 | 장중 빠른 가격/트리거 체크 |
-| global_scan | KST 12/18시 | 글로벌 선물/VIX/아시아/환율 |
-| run_monitor | 평일 6회 | 텔레그램 알림 9종 |
+| **event_collector** | **15~30분** | **데이터 수집 + 변화 감지 + 자동 토론** |
+| daily_analysis | KST 07:00 | 종합 리포트 (포트폴리오 + 시장 + 관심종목) |
 
 ```bash
-# Cron 등록
-0 8,10,12 * * 1-5 cd /data/claude/fin_advisor && python scripts/run_monitor.py
-30 16 * * 1-5 cd /data/claude/fin_advisor && python scripts/run_monitor.py
-0 19 * * 1-5 cd /data/claude/fin_advisor && python scripts/run_monitor.py
-0 23 * * * cd /data/claude/fin_advisor && python scripts/run_monitor.py
+# Cron 등록 — Event Pipeline
+# 미장 시간 (15분 간격): KST 23:30~06:00 = UTC 14:30~21:00
+*/15 14-21 * * 1-5 cd /data/claude/fin_advisor && python scripts/event_collector.py
+# 나머지 시간 (30분 간격)
+0,30 0-13,22-23 * * 1-5 cd /data/claude/fin_advisor && python scripts/event_collector.py
+# 주말 (하루 2회, 크립토/글로벌 모니터링)
+0 3,15 * * 0,6 cd /data/claude/fin_advisor && python scripts/event_collector.py
+# 일일 종합 리포트
+0 22 * * 1-5 cd /data/claude/fin_advisor && python scripts/daily_analysis.py
 ```
+
+### 레거시 스크립트 (수동 사용 가능)
+- `quick_scan.py`, `global_scan.py`, `run_monitor.py` — event_collector가 대체
 
 환경변수: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
 
@@ -253,7 +268,7 @@ Daily Analysis + Global Scan에서 자동 추적.
 
 ## Database
 
-SQLite DB with 13 tables:
+SQLite DB with 14 tables:
 - `asset_registry`: 추적 자산 마스터 (주식/채권/원자재/암호화폐/FX)
 - `market_data`: OHLCV + 기술적 지표 (RSI, MACD, Bollinger, SMA)
 - `raw_data_items`: 수집된 원본 데이터
@@ -266,6 +281,7 @@ SQLite DB with 13 tables:
 - `portfolio_trades`: 실매매 거래 기록
 - `alert_log`: 알림 전송 이력
 - `macro_indicators`: FRED 매크로 경제 지표 시계열
+- `event_queue`: 이벤트 드리븐 파이프라인 큐 (감지→처리→결과)
 
 ## Key Rules
 

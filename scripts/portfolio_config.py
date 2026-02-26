@@ -31,7 +31,7 @@ ALL_POSITIONS = {
     "GOOGL":    {"shares": 3,  "avg_price": 307.61,  "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
     "AMZN":     {"shares": 4,  "avg_price": 205.59,  "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
     "MSFT":     {"shares": 2,  "avg_price": 399.69,  "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
-    "ACRE":     {"shares": 15, "avg_price": 8.69,    "currency": "USD", "strategy": "인컴/배당", "buy_date": "2025-01-01"},
+    # ACRE: 2026-02-25 전량 손절 (15주, $8.69→$5.09, -41.4%, -$54.00)
     "BRK-B":    {"shares": 6,  "avg_price": 502.03,  "currency": "USD", "strategy": "가치투자", "buy_date": "2025-01-01"},
     # Korean Stocks
     "451800.KS": {"shares": 18, "avg_price": 5350,   "currency": "KRW", "strategy": "리츠/배당", "buy_date": "2025-01-01", "name": "한화리츠"},
