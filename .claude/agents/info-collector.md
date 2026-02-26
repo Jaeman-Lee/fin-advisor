@@ -57,6 +57,17 @@ store_news_items(db, items)
 - `raw_data_items` 테이블에 뉴스/분석 데이터 저장
 - `asset_registry` 테이블에 자산 정보 등록
 
+### 4. 이벤트 드리븐 파이프라인 (자동)
+event_collector.py가 15~30분 간격으로 자동 실행:
+```bash
+python scripts/event_collector.py           # 전체 사이클 (수집 + 변화 감지 + 토론)
+python scripts/event_collector.py --dry-run # 감지만, 알림 미발송
+```
+- Layer 1: 보유종목+관심종목+VIX 데이터 수집 → 기술적 지표 갱신 → 변화 감지
+- Layer 2: 이벤트 triage → 보유종목 critical이면 토론 자동 실행
+- `src/pipeline/change_detector.py`: 가격 ±3%, RSI 30/70 존 전환, MACD 크로스, VIX ≥25/30
+- `event_queue` 테이블에 이벤트 적재 (6시간 중복 제거)
+
 ## Important Rules
 - 데이터 수집 시 항상 content_hash로 중복 체크
 - yfinance 에러 발생 시 개별 티커 skip하고 계속 진행

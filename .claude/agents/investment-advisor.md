@@ -21,6 +21,7 @@ You are the main orchestrator of a **Personal Finance & Investment Platform**. Y
 | `info-collector` | 금융/비금융 데이터 수집 | 시장 데이터/뉴스 업데이트 필요 시 |
 | `data-processor` | 데이터 정제, 테마 분류, 시그널 생성 | 수집 후 처리 파이프라인 실행 시 |
 | `db-agent` | 자연어→SQL 질의, 데이터 기반 답변 | 데이터 분석/조회 필요 시 |
+| `debate-moderator` | 6명 전략 전문가 토론 주재 | 종목 매수/매도 판단 필요 시 |
 
 ## Data Flow
 ```
@@ -74,7 +75,6 @@ for ticker, pos in ALL_POSITIONS.items():
 |------|------|------|
 | US빅테크과매도 | GOOGL, AMZN, MSFT | 과매도 반등 (분할매수) |
 | 가치투자 | BRK-B | 장기 안정 성장 |
-| 인컴/배당 | ACRE | 배당 수익 |
 | 리츠/배당 | 한화리츠 | KR 부동산 배당 |
 | 안전자산 | KRX 금 | 인플레이션 헤지 |
 
@@ -83,7 +83,8 @@ for ticker, pos in ALL_POSITIONS.items():
 - 진원생명과학: -1,224,816원 (-40.0%)
 - 카메코 (CCJ): -334,936원 (-6.1%)
 - 팔란티어 (PLTR): -1,278,045원 (-12.7%)
-- **총 확정 손실: -2,837,797원**
+- ACRE: -77,220원 (-41.4%) — 배당 함정
+- **총 확정 손실: -2,915,017원**
 
 ---
 
@@ -149,24 +150,40 @@ print(f'Risk: {risk[\"overall_risk\"]} (score: {risk.get(\"risk_score\")})')
 
 ---
 
-## Service 3: Market Monitoring
+## Service 3: Market Monitoring (Event-Driven Pipeline)
+
+### 2-Layer 이벤트 드리븐 파이프라인
+```
+Layer 1 (15~30분 간격)        Layer 2 (이벤트 드리븐)
+데이터 수집 + 변화 감지  ──→  Triage → 토론/알림/로그
+```
 
 ### 실행
 ```bash
-python scripts/run_monitor.py --dry-run    # 테스트
-python scripts/run_monitor.py              # 전체 실행
-python scripts/run_monitor.py --ticker GOOGL AMZN  # 특정 종목
+python scripts/event_collector.py                    # 전체 사이클 (L1+L2)
+python scripts/event_collector.py --dry-run          # 감지만, 알림 미발송
+python scripts/event_collector.py --detect-only      # Layer 1만
+python scripts/run_debate.py --ticker GOOGL          # 수동 토론
+python scripts/run_debate.py                         # 전체 포트폴리오 토론
 ```
 
-### 모니터링 모듈
+### 변화 감지 → 대응 매트릭스
+| 이벤트 | 보유종목 | 비보유 |
+|--------|---------|--------|
+| 가격 ≥5% (critical) | debate | alert |
+| 가격 ≥3% (warning) | alert | log |
+| RSI 30/70 존 진입 | debate | alert |
+| MACD 데드크로스 | debate | alert |
+| VIX ≥30 | debate(전체) | — |
+
+### 파이프라인 모듈
 | 모듈 | 역할 |
 |------|------|
-| `alert_types.py` | Alert 데이터클래스, AlertPriority/AlertCategory enum |
-| `config.py` | 분할매수 전략 정의 (ACTIVE_STRATEGY) |
-| `market_monitor.py` | 7종 시장 알림 체크 |
-| `split_buy_monitor.py` | 분할매수 트리거 평가 |
-| `dedup.py` | 알림 중복 방지 (24시간 or 영구) |
-| `telegram_sender.py` | 텔레그램 HTML 포맷 + 전송 |
+| `src/pipeline/change_detector.py` | 가격/RSI/MACD/VIX 변화 감지 |
+| `src/pipeline/event_triage.py` | 이벤트 분류 → debate/alert/log |
+| `src/pipeline/event_store.py` | event_queue DB 영속화 + 중복 제거 |
+| `src/debate/moderator.py` | 6명 토론 주재 + 투표 집계 |
+| `src/monitoring/telegram_sender.py` | 텔레그램 알림 전송 |
 
 ### 한국 시장 분석 (독립형)
 ```bash
@@ -225,6 +242,7 @@ python scripts/analyze_kr_market.py
 | `portfolio_trades` | 실매매 기록 (action, quantity, price, tranche, strategy) |
 | `alert_log` | 알림 전송 이력 (dedup_key, category, priority, sent_at) |
 | `macro_indicators` | FRED 매크로 시계열 (series_id + date) |
+| `event_queue` | 이벤트 파이프라인 큐 (감지→처리→결과) |
 
 ## Key Documents
 | File | Purpose |
