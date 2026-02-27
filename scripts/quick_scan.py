@@ -30,13 +30,16 @@ from portfolio_config import (
     HELD_TICKERS,
     MARKET_TICKERS,
     POSITIONS,
-    INVESTED,
-    REMAINING,
+    ALL_POSITIONS,
+    ALL_TICKERS,
+    PLTR_TRANCHE_2_TRIGGERS,
     TRANCHE_2_TRADES,
     TRANCHE_3_TRADES,
     Colors,
     check_tranche_2_triggers,
     check_tranche_3_triggers,
+    check_price_drop_trigger,
+    check_time_elapsed_trigger,
     compute_pnl,
 )
 
@@ -193,7 +196,6 @@ def format_terminal_output(
     else:
         lines.append(f" → 대기 유지")
 
-    lines.append(f"{C.BOLD}{SEPARATOR}{C.RESET}")
     return "\n".join(lines)
 
 
@@ -249,9 +251,13 @@ def main():
 
     now = datetime.now()
 
-    # Fetch prices for held + market tickers
-    all_tickers = HELD_TICKERS + MARKET_TICKERS
-    price_data = fetch_prices(all_tickers)
+    # USD 종목만 스캔 (KRW 자산 제외)
+    USD_POSITIONS = {t: v for t, v in ALL_POSITIONS.items() if v.get("currency", "USD") == "USD"}
+    USD_TICKERS = list(USD_POSITIONS.keys())
+
+    # Fetch prices for all USD held tickers + market tickers
+    fetch_tickers = list(set(USD_TICKERS + MARKET_TICKERS))
+    price_data = fetch_prices(fetch_tickers)
 
     if not price_data:
         if args.json:
@@ -260,35 +266,60 @@ def main():
             print("ERROR: Failed to fetch any price data. Check network connection.", file=sys.stderr)
         sys.exit(2)
 
-    # Check if we got held stock prices
-    held_prices = {t: price_data[t]["price"] for t in HELD_TICKERS if t in price_data}
-    missing = [t for t in HELD_TICKERS if t not in price_data]
+    all_prices = {t: price_data[t]["price"] for t in USD_TICKERS if t in price_data}
+    missing = [t for t in USD_TICKERS if t not in price_data]
     if missing:
         print(f"WARNING: Missing price data for: {', '.join(missing)}", file=sys.stderr)
 
-    if not held_prices:
+    if not all_prices:
         if args.json:
             print(json.dumps({"error": "No held stock prices available", "timestamp": now.isoformat()}))
         else:
             print("ERROR: No held stock prices available.", file=sys.stderr)
         sys.exit(2)
 
-    # Compute P&L
-    pnl_list = compute_pnl(POSITIONS, held_prices)
+    # Compute P&L for USD positions only
+    pnl_list = compute_pnl(USD_POSITIONS, all_prices)
 
-    # Check triggers (quick scan: price + time only, no RSI/MACD/SMA)
+    # GOOGL/AMZN/MSFT triggers (price + time only)
+    held_prices = {t: all_prices[t] for t in HELD_TICKERS if t in all_prices}
     t2_result = check_tranche_2_triggers(held_prices, rsi_values=None)
     t3_result = check_tranche_3_triggers()
+
+    # PLTR trigger (price + time only)
+    pltr_price = {"PLTR": all_prices["PLTR"]} if "PLTR" in all_prices else {}
+    pltr_positions = {"PLTR": ALL_POSITIONS["PLTR"]} if "PLTR" in ALL_POSITIONS else {}
+    pltr_drop = check_price_drop_trigger(pltr_price, pltr_positions, PLTR_TRANCHE_2_TRIGGERS["price_drop_pct"])
+    pltr_time = check_time_elapsed_trigger(PLTR_TRANCHE_2_TRIGGERS["time_target"])
+    pltr_fired = pltr_drop.fired is True or pltr_time.fired is True
 
     # Output
     if args.json:
         output = build_json_output(price_data, pnl_list, t2_result, t3_result, now)
+        output["pltr_trigger"] = {
+            "any_fired": pltr_fired,
+            "price_drop": {"fired": pltr_drop.fired, "details": pltr_drop.details},
+            "time_elapsed": {"fired": pltr_time.fired, "details": pltr_time.details},
+        }
         print(json.dumps(output, indent=2, ensure_ascii=False))
     else:
-        print(format_terminal_output(price_data, pnl_list, t2_result, t3_result, now))
+        C = Colors
+        lines = [format_terminal_output(price_data, pnl_list, t2_result, t3_result, now)]
+
+        # PLTR trigger section
+        pltr_parts = []
+        md = pltr_drop.data.get("max_drop_pct", 0)
+        days = pltr_time.data.get("days_remaining", "?")
+        target = PLTR_TRANCHE_2_TRIGGERS["time_target"]
+        pltr_parts.append(f"{C.GREEN}✓ 10% 하락{C.RESET}" if pltr_drop.fired else f"✗ 10% 하락 (현재 {md:+.1f}%)")
+        pltr_parts.append(f"{C.GREEN}✓ {target}{C.RESET}" if pltr_time.fired else f"✗ {target}까지 {days}일")
+        pltr_label = f"{C.GREEN}{C.BOLD}PLTR 2차{C.RESET}" if pltr_fired else " PLTR 2차"
+        lines.append(f"{pltr_label}: {' | '.join(pltr_parts)}")
+        lines.append(f"{C.BOLD}{'═' * 58}{C.RESET}")
+        print("\n".join(lines))
 
     # Exit code
-    if t2_result.any_fired or t3_result.any_fired:
+    if t2_result.any_fired or t3_result.any_fired or pltr_fired:
         sys.exit(1)
     sys.exit(0)
 

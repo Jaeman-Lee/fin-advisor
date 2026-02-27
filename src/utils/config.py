@@ -14,6 +14,7 @@ STOCK_TICKERS = [
     "^GSPC", "^IXIC", "^DJI",          # US indices
     "^KS11", "^N225", "^FTSE",          # KR, JP, UK indices
     "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA",  # US mega cap
+    "PLTR", "BRK-B",                    # Portfolio: 성장주, 가치투자
     "005930.KS", "000660.KS",           # Samsung, SK Hynix
 ]
 
