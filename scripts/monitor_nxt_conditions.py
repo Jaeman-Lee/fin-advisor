@@ -340,10 +340,6 @@ def run_once() -> int:
     foreign = get_foreign_investor()
     program = get_program_trading()
 
-    msg = format_report(price, fx, foreign, program)
-    log(msg)
-    send_telegram(msg)
-
     met = 0
     if foreign and foreign["is_buying"]:
         met += 1
@@ -351,6 +347,14 @@ def run_once() -> int:
         met += 1
     if fx and fx["declining"]:
         met += 1
+
+    msg = format_report(price, fx, foreign, program)
+    log(msg)
+
+    if met >= 2:
+        send_telegram(msg)
+    else:
+        log(f"{met}/3 충족 — Telegram 미발송")
 
     return 1 if met == 3 else 0
 
