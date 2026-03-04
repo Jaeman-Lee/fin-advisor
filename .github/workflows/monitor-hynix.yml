@@ -1,0 +1,44 @@
+name: SK Hynix Monitor
+
+on:
+  schedule:
+    # KST 09:00~15:30 = UTC 00:00~06:30, 5분 간격, 월~금
+    - cron: '*/5 0-6 * * 1-5'
+  workflow_dispatch: # 수동 실행 가능
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install yfinance pandas requests
+
+      - name: Run SK Hynix monitor
+        id: monitor
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set +e
+          python scripts/monitor_hynix.py --once 2>&1 | tee monitor_output.txt
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          echo "EXIT_CODE=$EXIT_CODE"
+          exit 0
+
+      - name: Upload log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hynix-monitor-${{ github.run_number }}
+          path: monitor_output.txt
+          retention-days: 7
