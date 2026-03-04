@@ -1,0 +1,45 @@
+name: NXT SK Hynix 3-Condition Monitor
+
+on:
+  schedule:
+    # NXT pre-market: KST 08:00~08:50 = UTC 23:00~23:50 (Sun-Thu)
+    - cron: '0,30 23 * * 0-4'
+    # KRX regular + NXT post-market: KST 09:00~20:00 = UTC 00:00~11:00 (Mon-Fri)
+    - cron: '0,30 0-11 * * 1-5'
+  workflow_dispatch: # 수동 실행
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install yfinance pandas requests
+
+      - name: Run NXT 3-condition monitor
+        id: monitor
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set +e
+          python scripts/monitor_nxt_conditions.py --once 2>&1 | tee monitor_output.txt
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          exit 0
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nxt-monitor-${{ github.run_number }}
+          path: monitor_output.txt
+          retention-days: 7
