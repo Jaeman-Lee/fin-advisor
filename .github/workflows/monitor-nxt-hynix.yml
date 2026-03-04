@@ -2,10 +2,10 @@ name: NXT SK Hynix 3-Condition Monitor
 
 on:
   schedule:
-    # NXT pre-market: KST 08:00~08:50 = UTC 23:00~23:50 (Sun-Thu)
-    - cron: '0,30 23 * * 0-4'
-    # KRX regular + NXT post-market: KST 09:00~20:00 = UTC 00:00~11:00 (Mon-Fri)
-    - cron: '0,30 0-11 * * 1-5'
+    # NXT pre-market: KST 08:00~08:50 = UTC 23:00~23:50 (Sun-Thu), 10분 간격
+    - cron: '*/10 23 * * 0-4'
+    # KRX regular + NXT post-market: KST 09:00~20:00 = UTC 00:00~11:00 (Mon-Fri), 10분 간격
+    - cron: '*/10 0-11 * * 1-5'
   workflow_dispatch: # 수동 실행
 
 jobs:
