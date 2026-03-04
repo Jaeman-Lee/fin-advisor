@@ -143,8 +143,14 @@ def analyze(daily, intra):
         if isinstance(close_col, pd.DataFrame):
             close_col = close_col.iloc[:, 0]
         result["price"] = float(close_col.dropna().iloc[-1])
-        result["intra_high"] = float(intra["High"].max()) if "High" in intra.columns else None
-        result["intra_low"] = float(intra["Low"].min()) if "Low" in intra.columns else None
+        high_col = intra["High"]
+        if isinstance(high_col, pd.DataFrame):
+            high_col = high_col.iloc[:, 0]
+        low_col = intra["Low"]
+        if isinstance(low_col, pd.DataFrame):
+            low_col = low_col.iloc[:, 0]
+        result["intra_high"] = float(high_col.max())
+        result["intra_low"] = float(low_col.min())
 
     if daily is not None and len(daily) >= 2:
         close_col = daily["Close"]
