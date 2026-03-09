@@ -553,6 +553,114 @@ class DatabaseOperations:
                 ).fetchone()
             return row is not None
 
+    # ── Portfolio Holdings (Snapshots) ────────────────────────────────────
+
+    def save_holdings_snapshot(self, snapshot_date: str,
+                               holdings: list[dict]) -> int:
+        """Save a daily portfolio snapshot.
+
+        holdings: list of {ticker, shares, avg_price, current_price,
+                           currency, strategy}
+        Returns number of rows inserted/updated.
+        """
+        count = 0
+        with self._conn() as conn:
+            for h in holdings:
+                shares = h["shares"]
+                avg_price = h["avg_price"]
+                current_price = h.get("current_price")
+                cost_basis = shares * avg_price
+                market_value = shares * current_price if current_price else None
+                pnl = market_value - cost_basis if market_value else None
+                pnl_pct = (pnl / cost_basis * 100) if pnl and cost_basis else None
+
+                conn.execute(
+                    """INSERT INTO portfolio_holdings
+                       (snapshot_date, ticker, shares, avg_price, current_price,
+                        market_value, cost_basis, pnl, pnl_pct, currency, strategy)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                       ON CONFLICT(snapshot_date, ticker) DO UPDATE SET
+                         shares=excluded.shares,
+                         avg_price=excluded.avg_price,
+                         current_price=excluded.current_price,
+                         market_value=excluded.market_value,
+                         cost_basis=excluded.cost_basis,
+                         pnl=excluded.pnl,
+                         pnl_pct=excluded.pnl_pct,
+                         currency=excluded.currency,
+                         strategy=excluded.strategy""",
+                    (snapshot_date, h["ticker"], shares, avg_price,
+                     current_price, market_value, cost_basis, pnl, pnl_pct,
+                     h.get("currency", "USD"), h.get("strategy")),
+                )
+                count += 1
+        return count
+
+    def get_holdings_snapshot(self, snapshot_date: str) -> list[dict]:
+        """Get portfolio snapshot for a specific date."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                """SELECT * FROM portfolio_holdings
+                   WHERE snapshot_date = ?
+                   ORDER BY currency, ticker""",
+                (snapshot_date,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_holdings_history(self, ticker: str,
+                             start_date: str | None = None,
+                             end_date: str | None = None,
+                             limit: int = 365) -> list[dict]:
+        """Get historical snapshots for a specific ticker."""
+        with self._conn() as conn:
+            query = "SELECT * FROM portfolio_holdings WHERE ticker = ?"
+            params: list = [ticker]
+            if start_date:
+                query += " AND snapshot_date >= ?"
+                params.append(start_date)
+            if end_date:
+                query += " AND snapshot_date <= ?"
+                params.append(end_date)
+            query += " ORDER BY snapshot_date DESC LIMIT ?"
+            params.append(limit)
+            rows = conn.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_portfolio_summary_history(self, currency: str | None = None,
+                                      start_date: str | None = None,
+                                      limit: int = 90) -> list[dict]:
+        """Get daily portfolio totals (aggregated by date and currency).
+
+        Returns [{snapshot_date, currency, total_cost, total_value, total_pnl, total_pnl_pct}]
+        """
+        with self._conn() as conn:
+            query = """SELECT snapshot_date, currency,
+                              SUM(cost_basis) as total_cost,
+                              SUM(market_value) as total_value,
+                              SUM(pnl) as total_pnl,
+                              ROUND(SUM(pnl) * 100.0 / NULLIF(SUM(cost_basis), 0), 2) as total_pnl_pct
+                       FROM portfolio_holdings
+                       WHERE market_value IS NOT NULL"""
+            params: list = []
+            if currency:
+                query += " AND currency = ?"
+                params.append(currency)
+            if start_date:
+                query += " AND snapshot_date >= ?"
+                params.append(start_date)
+            query += " GROUP BY snapshot_date, currency ORDER BY snapshot_date DESC LIMIT ?"
+            params.append(limit)
+            rows = conn.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_latest_snapshot_date(self) -> str | None:
+        """Get the most recent snapshot date."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT MAX(snapshot_date) as latest FROM portfolio_holdings"
+            ).fetchone()
+            return row["latest"] if row and row["latest"] else None
+
     # ── Generic Query ──────────────────────────────────────────────────────
 
     def execute_readonly(self, sql: str, params: tuple = ()) -> list[dict]:

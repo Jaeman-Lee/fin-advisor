@@ -186,3 +186,121 @@ class TestAdvisoryReports:
         report = db.get_latest_report("daily")
         assert report is not None
         assert report["title"] == "Daily Report"
+
+
+class TestPortfolioHoldings:
+    def _sample_holdings(self):
+        return [
+            {"ticker": "GOOGL", "shares": 3, "avg_price": 307.61,
+             "current_price": 290.00, "currency": "USD", "strategy": "US빅테크과매도"},
+            {"ticker": "AMZN", "shares": 4, "avg_price": 205.59,
+             "current_price": 210.00, "currency": "USD", "strategy": "US빅테크과매도"},
+            {"ticker": "000660.KS", "shares": 27, "avg_price": 991000,
+             "current_price": 824000, "currency": "KRW", "strategy": "장투"},
+        ]
+
+    def test_save_and_get_snapshot(self, db):
+        holdings = self._sample_holdings()
+        count = db.save_holdings_snapshot("2026-03-09", holdings)
+        assert count == 3
+
+        snapshot = db.get_holdings_snapshot("2026-03-09")
+        assert len(snapshot) == 3
+        googl = next(h for h in snapshot if h["ticker"] == "GOOGL")
+        assert googl["shares"] == 3
+        assert googl["avg_price"] == 307.61
+        assert googl["current_price"] == 290.00
+        assert googl["cost_basis"] == pytest.approx(3 * 307.61)
+        assert googl["market_value"] == pytest.approx(3 * 290.00)
+        assert googl["pnl"] < 0  # loss
+        assert googl["currency"] == "USD"
+
+    def test_upsert_overwrites_same_date(self, db):
+        holdings = self._sample_holdings()
+        db.save_holdings_snapshot("2026-03-09", holdings)
+
+        # Update price
+        holdings[0]["current_price"] = 320.00
+        db.save_holdings_snapshot("2026-03-09", holdings)
+
+        snapshot = db.get_holdings_snapshot("2026-03-09")
+        assert len(snapshot) == 3  # no duplicates
+        googl = next(h for h in snapshot if h["ticker"] == "GOOGL")
+        assert googl["current_price"] == 320.00
+
+    def test_pnl_computation(self, db):
+        holdings = self._sample_holdings()
+        db.save_holdings_snapshot("2026-03-09", holdings)
+        snapshot = db.get_holdings_snapshot("2026-03-09")
+
+        hynix = next(h for h in snapshot if h["ticker"] == "000660.KS")
+        expected_cost = 27 * 991000
+        expected_value = 27 * 824000
+        expected_pnl = expected_value - expected_cost
+        assert hynix["cost_basis"] == pytest.approx(expected_cost)
+        assert hynix["market_value"] == pytest.approx(expected_value)
+        assert hynix["pnl"] == pytest.approx(expected_pnl)
+        assert hynix["pnl_pct"] == pytest.approx(expected_pnl / expected_cost * 100)
+
+    def test_none_price_handled(self, db):
+        holdings = [{"ticker": "TEST", "shares": 10, "avg_price": 100.0,
+                     "current_price": None, "currency": "USD", "strategy": "test"}]
+        db.save_holdings_snapshot("2026-03-09", holdings)
+        snapshot = db.get_holdings_snapshot("2026-03-09")
+        assert len(snapshot) == 1
+        assert snapshot[0]["market_value"] is None
+        assert snapshot[0]["pnl"] is None
+
+    def test_get_holdings_history(self, db):
+        for day, price in [("2026-03-07", 900000), ("2026-03-08", 850000), ("2026-03-09", 824000)]:
+            db.save_holdings_snapshot(day, [
+                {"ticker": "000660.KS", "shares": 27, "avg_price": 991000,
+                 "current_price": price, "currency": "KRW", "strategy": "장투"},
+            ])
+
+        history = db.get_holdings_history("000660.KS")
+        assert len(history) == 3
+        # Most recent first
+        assert history[0]["snapshot_date"] == "2026-03-09"
+        assert history[0]["current_price"] == 824000
+        assert history[2]["snapshot_date"] == "2026-03-07"
+
+    def test_get_holdings_history_date_filter(self, db):
+        for day, price in [("2026-03-07", 900000), ("2026-03-08", 850000), ("2026-03-09", 824000)]:
+            db.save_holdings_snapshot(day, [
+                {"ticker": "000660.KS", "shares": 27, "avg_price": 991000,
+                 "current_price": price, "currency": "KRW", "strategy": "장투"},
+            ])
+
+        history = db.get_holdings_history("000660.KS", start_date="2026-03-08")
+        assert len(history) == 2
+
+    def test_portfolio_summary_history(self, db):
+        for day in ["2026-03-08", "2026-03-09"]:
+            db.save_holdings_snapshot(day, self._sample_holdings())
+
+        summary = db.get_portfolio_summary_history()
+        assert len(summary) == 4  # 2 days * 2 currencies
+        usd_rows = [s for s in summary if s["currency"] == "USD"]
+        krw_rows = [s for s in summary if s["currency"] == "KRW"]
+        assert len(usd_rows) == 2
+        assert len(krw_rows) == 2
+
+    def test_portfolio_summary_currency_filter(self, db):
+        db.save_holdings_snapshot("2026-03-09", self._sample_holdings())
+
+        usd_only = db.get_portfolio_summary_history(currency="USD")
+        assert len(usd_only) == 1
+        assert usd_only[0]["currency"] == "USD"
+
+    def test_get_latest_snapshot_date(self, db):
+        assert db.get_latest_snapshot_date() is None
+
+        db.save_holdings_snapshot("2026-03-08", self._sample_holdings())
+        db.save_holdings_snapshot("2026-03-09", self._sample_holdings())
+
+        assert db.get_latest_snapshot_date() == "2026-03-09"
+
+    def test_empty_snapshot(self, db):
+        snapshot = db.get_holdings_snapshot("2026-01-01")
+        assert snapshot == []

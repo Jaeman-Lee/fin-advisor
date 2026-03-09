@@ -969,7 +969,27 @@ def main():
     logger.info("Fetching watchlist indicators...")
     watchlist_data = get_watchlist_indicators(db)
 
-    # 11. Generate & save markdown report
+    # 11. Save portfolio holdings snapshot
+    logger.info("Saving portfolio holdings snapshot...")
+    try:
+        snapshot_date = now.strftime("%Y-%m-%d")
+        holdings_data = []
+        for ticker, pos in ALL_POSITIONS.items():
+            current_price = all_prices.get(ticker)
+            holdings_data.append({
+                "ticker": ticker,
+                "shares": pos["shares"],
+                "avg_price": pos["avg_price"],
+                "current_price": current_price,
+                "currency": pos.get("currency", "USD"),
+                "strategy": pos.get("strategy"),
+            })
+        saved = db.save_holdings_snapshot(snapshot_date, holdings_data)
+        logger.info(f"Holdings snapshot saved: {saved} positions for {snapshot_date}")
+    except Exception as e:
+        logger.warning(f"Failed to save holdings snapshot: {e}")
+
+    # 12. Generate & save markdown report
     report_path = None
     try:
         DAILY_LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -986,7 +1006,7 @@ def main():
     except Exception as e:
         logger.warning(f"Failed to save report: {e}")
 
-    # 12. Output
+    # 13. Output
     if args.json:
         output = build_json_output(
             now, market_overview, pnl_list, indicators,

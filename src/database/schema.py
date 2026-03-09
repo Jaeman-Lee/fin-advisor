@@ -256,6 +256,29 @@ CREATE INDEX IF NOT EXISTS idx_event_pending ON event_queue(processed, detected_
 CREATE INDEX IF NOT EXISTS idx_event_type ON event_queue(event_type, ticker);
 
 -- ═══════════════════════════════════════════════════════════════════════════
+-- 15. portfolio_holdings: 날짜별 포트폴리오 스냅샷
+-- ═══════════════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS portfolio_holdings (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_date   TEXT NOT NULL,              -- YYYY-MM-DD
+    ticker          TEXT NOT NULL,
+    shares          INTEGER NOT NULL,
+    avg_price       REAL NOT NULL,              -- 매입 단가
+    current_price   REAL,                       -- 스냅샷 시점 현재가
+    market_value    REAL,                       -- shares * current_price
+    cost_basis      REAL NOT NULL,              -- shares * avg_price
+    pnl             REAL,                       -- market_value - cost_basis
+    pnl_pct         REAL,                       -- (pnl / cost_basis) * 100
+    currency        TEXT NOT NULL DEFAULT 'USD',
+    strategy        TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(snapshot_date, ticker)
+);
+
+CREATE INDEX IF NOT EXISTS idx_holdings_date ON portfolio_holdings(snapshot_date);
+CREATE INDEX IF NOT EXISTS idx_holdings_ticker ON portfolio_holdings(ticker, snapshot_date);
+
+-- ═══════════════════════════════════════════════════════════════════════════
 -- Seed: default data sources
 -- ═══════════════════════════════════════════════════════════════════════════
 INSERT OR IGNORE INTO data_sources (name, source_type, description) VALUES
