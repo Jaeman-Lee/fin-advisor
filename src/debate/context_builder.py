@@ -118,6 +118,9 @@ def build_context(
     # Fundamentals (from yfinance, cached per session)
     fundamentals = _fetch_fundamentals(ticker)
 
+    # Global market data for crisis analysis (VIX, Gold, Oil, DXY, USDKRW)
+    global_market_data = _fetch_global_market_data(db)
+
     return DebateContext(
         ticker=ticker,
         asset_info=asset_info,
@@ -129,7 +132,49 @@ def build_context(
         portfolio_context=portfolio_config or {},
         active_signals=active_signals,
         fundamentals=fundamentals,
+        global_market_data=global_market_data,
     )
+
+
+def _fetch_global_market_data(db: DatabaseOperations) -> dict:
+    """Fetch latest data for global crisis indicators (VIX, Gold, Oil, DXY, USDKRW).
+
+    Returns dict with keys: vix, gold, oil, dxy, usdkrw — each containing
+    {close, prev_close, change_pct} or empty dict on failure.
+    """
+    result = {}
+    crisis_tickers = {
+        "vix": "^VIX",
+        "gold": "GC=F",
+        "oil": "CL=F",
+        "dxy": "DX-Y.NYB",
+        "usdkrw": "USDKRW=X",
+        "us10y": "^TNX",
+    }
+    for key, ticker in crisis_tickers.items():
+        try:
+            asset_id = db.get_asset_id(ticker)
+            if asset_id is None:
+                continue
+            rows = db.get_market_data(asset_id, limit=5)
+            if not rows:
+                continue
+            latest = rows[0]
+            prev = rows[1] if len(rows) >= 2 else None
+            close = latest.get("close") or latest.get("adj_close")
+            if close is None:
+                continue
+            close = float(close)
+            entry = {"close": close, "date": latest.get("date", "")}
+            if prev:
+                prev_close = prev.get("close") or prev.get("adj_close")
+                if prev_close and float(prev_close) > 0:
+                    entry["prev_close"] = float(prev_close)
+                    entry["change_pct"] = (close - float(prev_close)) / float(prev_close) * 100
+            result[key] = entry
+        except Exception:
+            pass
+    return result
 
 
 def _fetch_fundamentals(ticker: str) -> dict:

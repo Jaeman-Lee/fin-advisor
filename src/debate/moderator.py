@@ -7,6 +7,7 @@ from collections import Counter
 from datetime import datetime
 
 from src.database.operations import DatabaseOperations
+from src.debate.agents.global_crisis_analyst import GlobalCrisisAnalyst
 from src.debate.agents.growth_investor import GrowthInvestor
 from src.debate.agents.income_investor import IncomeInvestor
 from src.debate.agents.macro_strategist import MacroStrategist
@@ -40,6 +41,7 @@ class DebateModerator:
             MomentumTrader(),
             IncomeInvestor(),
             MacroStrategist(),
+            GlobalCrisisAnalyst(),
             RiskManager(),
         ]
 
@@ -237,7 +239,7 @@ class DebateModerator:
         if max_side == total:
             return Urgency.UNANIMOUS
 
-        # Majority: 4+ out of 6
+        # Majority: clear majority (5+ out of 7, or 4+ out of 6)
         if max_side >= total - 2:
             return Urgency.MAJORITY
 

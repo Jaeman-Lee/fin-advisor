@@ -34,13 +34,15 @@ ALL_POSITIONS = {
     # ACRE: 2026-02-25 전량 손절 (15주, $8.69→$5.09, -41.4%, -$54.00)
     "PLTR":     {"shares": 6,  "avg_price": 134.19,  "currency": "USD", "strategy": "성장주분할매수", "buy_date": "2026-02-26"},
     "BRK-B":    {"shares": 6,  "avg_price": 502.03,  "currency": "USD", "strategy": "가치투자", "buy_date": "2025-01-01"},
-    # Korean Stocks
-    "451800.KS": {"shares": 18, "avg_price": 5350,   "currency": "KRW", "strategy": "리츠/배당", "buy_date": "2025-01-01", "name": "한화리츠"},
+    # 한화리츠(451800.KS): 2026-03-03 매도 (18주, 5350원→5000원, -6.5%)
+    # KORU: 2026-03-05 전량 매도 (8주, $453.50→$452.30, -0.27%, -$9.60)
+    # KR Stocks
+    "000660.KS": {"shares": 27, "avg_price": 991000, "currency": "KRW", "strategy": "장투", "buy_date": "2026-03-05"},
 }
 
 # Non-stock assets
 GOLD_POSITION = {"qty_grams": 18, "avg_price_krw": 227431, "currency": "KRW"}
-CASH_BALANCES = {"USD": 2799.45, "KRW": 7046698}  # PLTR 1차 6주 $805.14 차감
+CASH_BALANCES = {"USD": 3618.40, "KRW": 0}  # KORU 매도 대금 +$818.95, 하이닉스 27주 매수로 KRW 소진
 
 ALL_TICKERS = list(ALL_POSITIONS.keys())
 
@@ -60,6 +62,18 @@ WATCHLIST = {
         "risk_factors": ["SEC 증권 분류", "집단소송", "고베타 80%+ 드로다운", "네트워크 장애 이력"],
         "added_date": "2026-02-25",
         "notes": "RSI 반등 + MACD 크로스 + 규제 완화 확인 전까지 관망",
+    },
+    "BITX": {
+        "name": "2x Bitcoin Strategy ETF (Volatility Shares)",
+        "thesis": "비트코인 2배 레버리지 ETF — 전쟁/인플레 헤지 + 크립토 상승 사이클",
+        "entry_conditions": {
+            "rsi_above": 40,            # RSI 40 이상 회복 시
+            "macd_golden_cross": True,   # MACD 골든크로스
+            "btc_above_sma20": True,    # BTC 가격 > SMA20
+        },
+        "risk_factors": ["2배 레버리지 decay", "크립토 변동성 극대", "전쟁 장기화 시 리스크자산 급락", "ETF 구조 리스크"],
+        "added_date": "2026-03-03",
+        "notes": "이란-미국 전쟁 중 크립토 헤지 수단 검토. 레버리지 특성상 단기 트레이딩 적합.",
     },
 }
 

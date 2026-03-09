@@ -29,6 +29,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from portfolio_config import (
+    ALL_POSITIONS,
+    ALL_TICKERS,
     HELD_TICKERS,
     MARKET_TICKERS,
     POSITIONS,
@@ -126,6 +128,43 @@ def compute_technical_indicators(db: DatabaseOperations) -> int:
 # ──────────────────────────────────────────────────────────────
 # Indicator Extraction from DB
 # ──────────────────────────────────────────────────────────────
+
+
+def get_all_position_prices(db: DatabaseOperations) -> dict[str, float]:
+    """Fetch latest prices for ALL positions (USD + KRW).
+
+    Returns {ticker: current_price} for every ticker in ALL_POSITIONS.
+    """
+    prices = {}
+    for ticker in ALL_TICKERS:
+        asset_id = db.get_asset_id(ticker)
+        if asset_id is None:
+            logger.warning(f"Asset {ticker} not found in DB")
+            continue
+        rows = db.get_market_data(asset_id, limit=1)
+        if not rows:
+            logger.warning(f"No market data for {ticker}")
+            continue
+        close = rows[0].get("close") or rows[0].get("adj_close")
+        if close is not None:
+            prices[ticker] = float(close)
+    return prices
+
+
+def compute_full_portfolio_pnl(
+    all_prices: dict[str, float],
+) -> tuple[list[dict], list[dict]]:
+    """Compute P&L for full portfolio, split by currency.
+
+    Returns (usd_pnl_list, krw_pnl_list).
+    """
+    usd_positions = {t: p for t, p in ALL_POSITIONS.items() if p.get("currency") == "USD"}
+    krw_positions = {t: p for t, p in ALL_POSITIONS.items() if p.get("currency") == "KRW"}
+
+    usd_pnl = compute_pnl(usd_positions, all_prices)
+    krw_pnl = compute_pnl(krw_positions, all_prices)
+
+    return usd_pnl, krw_pnl
 
 
 def get_held_stock_indicators(db: DatabaseOperations) -> dict:
@@ -395,6 +434,8 @@ def generate_markdown_report(
     risk_data: dict,
     butterfly_chains: list[dict],
     watchlist_data: dict | None = None,
+    usd_pnl: list[dict] | None = None,
+    krw_pnl: list[dict] | None = None,
 ) -> str:
     """Generate markdown daily report."""
     lines = []
@@ -417,24 +458,51 @@ def generate_markdown_report(
         lines.append(f"- **VIX**: {vix['price']:.1f} ({vix_level})")
     lines.append("")
 
-    # Portfolio P&L
-    lines.append("## Portfolio P&L")
+    # Full Portfolio P&L
+    lines.append("## Portfolio P&L (전체 보유현황)")
     lines.append("")
-    lines.append("| 종목 | 주수 | 매수가 | 현재가 | P&L | 수익률 |")
-    lines.append("|------|------|--------|--------|-----|--------|")
-    for item in pnl_list:
-        if item["ticker"] == "TOTAL":
-            lines.append(
-                f"| **합계** | {item['shares']} |  |  "
-                f"| **{item['pnl']:+,.2f}** | **{item['pnl_pct']:+.1f}%** |"
-            )
-        else:
-            lines.append(
-                f"| {item['ticker']} | {item['shares']} "
-                f"| ${item['avg_price']:,.2f} | ${item['current_price']:,.2f} "
-                f"| {item['pnl']:+,.2f} | {item['pnl_pct']:+.1f}% |"
-            )
-    lines.append("")
+
+    # USD Positions
+    if usd_pnl:
+        lines.append("### USD Positions")
+        lines.append("")
+        lines.append("| 종목 | 전략 | 주수 | 매수가 | 현재가 | P&L | 수익률 |")
+        lines.append("|------|------|------|--------|--------|-----|--------|")
+        for item in usd_pnl:
+            strategy = ALL_POSITIONS.get(item["ticker"], {}).get("strategy", "")
+            if item["ticker"] == "TOTAL":
+                lines.append(
+                    f"| **USD 합계** | | {item['shares']} | | "
+                    f"| **${item['pnl']:+,.2f}** | **{item['pnl_pct']:+.1f}%** |"
+                )
+            else:
+                lines.append(
+                    f"| {item['ticker']} | {strategy} | {item['shares']} "
+                    f"| ${item['avg_price']:,.2f} | ${item['current_price']:,.2f} "
+                    f"| ${item['pnl']:+,.2f} | {item['pnl_pct']:+.1f}% |"
+                )
+        lines.append("")
+
+    # KRW Positions
+    if krw_pnl:
+        lines.append("### KRW Positions")
+        lines.append("")
+        lines.append("| 종목 | 전략 | 주수 | 매수가 | 현재가 | P&L | 수익률 |")
+        lines.append("|------|------|------|--------|--------|-----|--------|")
+        for item in krw_pnl:
+            strategy = ALL_POSITIONS.get(item["ticker"], {}).get("strategy", "")
+            if item["ticker"] == "TOTAL":
+                lines.append(
+                    f"| **KRW 합계** | | {item['shares']} | | "
+                    f"| **{item['pnl']:+,.0f}원** | **{item['pnl_pct']:+.1f}%** |"
+                )
+            else:
+                lines.append(
+                    f"| {item['ticker']} | {strategy} | {item['shares']} "
+                    f"| {item['avg_price']:,.0f}원 | {item['current_price']:,.0f}원 "
+                    f"| {item['pnl']:+,.0f}원 | {item['pnl_pct']:+.1f}% |"
+                )
+        lines.append("")
 
     # Technical Indicators
     lines.append("## Technical Indicators")
@@ -583,6 +651,8 @@ def format_terminal_summary(
     risk_data: dict,
     report_path: str | None,
     watchlist_data: dict | None = None,
+    usd_pnl: list[dict] | None = None,
+    krw_pnl: list[dict] | None = None,
 ) -> str:
     """Format concise terminal summary."""
     C = Colors
@@ -609,23 +679,51 @@ def format_terminal_summary(
         lines.append(" " + "  |  ".join(parts))
         lines.append(THIN)
 
-    # P&L
-    for item in pnl_list:
-        ticker = item["ticker"]
-        pc = C.pnl_color(item["pnl"])
-        if ticker == "TOTAL":
-            lines.append(THIN)
-            lines.append(
-                f" {C.BOLD}TOTAL{C.RESET}   {item['shares']}주"
-                f"  ${item['cost']:,.2f} → ${item['market_value']:,.2f}"
-                f"  {pc}{item['pnl']:+,.2f}  ({item['pnl_pct']:+.1f}%){C.RESET}"
-            )
-        else:
-            lines.append(
-                f" {ticker:<6} {item['shares']}주"
-                f"  ${item['avg_price']:,.2f} → ${item['current_price']:,.2f}"
-                f"   {pc}{item['pnl']:+,.2f}  ({item['pnl_pct']:+.1f}%){C.RESET}"
-            )
+    # P&L — Full Portfolio
+    if usd_pnl:
+        lines.append(f" {C.BOLD}[USD]{C.RESET}")
+        for item in usd_pnl:
+            ticker = item["ticker"]
+            pc = C.pnl_color(item["pnl"])
+            if ticker == "TOTAL":
+                lines.append(THIN)
+                lines.append(
+                    f" {C.BOLD}USD 합계{C.RESET}  {item['shares']}주"
+                    f"  ${item['cost']:,.2f} → ${item['market_value']:,.2f}"
+                    f"  {pc}${item['pnl']:+,.2f}  ({item['pnl_pct']:+.1f}%){C.RESET}"
+                )
+            else:
+                strategy = ALL_POSITIONS.get(ticker, {}).get("strategy", "")
+                lines.append(
+                    f" {ticker:<6} {item['shares']}주"
+                    f"  ${item['avg_price']:,.2f} → ${item['current_price']:,.2f}"
+                    f"   {pc}${item['pnl']:+,.2f}  ({item['pnl_pct']:+.1f}%){C.RESET}"
+                    f"  {C.DIM}{strategy}{C.RESET}"
+                )
+
+    if krw_pnl:
+        krw_items = [i for i in krw_pnl if i["ticker"] != "TOTAL"]
+        krw_total = next((i for i in krw_pnl if i["ticker"] == "TOTAL"), None)
+        if krw_items:
+            lines.append(f" {C.BOLD}[KRW]{C.RESET}")
+            for item in krw_items:
+                ticker = item["ticker"]
+                pc = C.pnl_color(item["pnl"])
+                strategy = ALL_POSITIONS.get(ticker, {}).get("strategy", "")
+                lines.append(
+                    f" {ticker:<10} {item['shares']}주"
+                    f"  {item['avg_price']:,.0f}원 → {item['current_price']:,.0f}원"
+                    f"   {pc}{item['pnl']:+,.0f}원  ({item['pnl_pct']:+.1f}%){C.RESET}"
+                    f"  {C.DIM}{strategy}{C.RESET}"
+                )
+            if krw_total:
+                pc = C.pnl_color(krw_total["pnl"])
+                lines.append(THIN)
+                lines.append(
+                    f" {C.BOLD}KRW 합계{C.RESET}  {krw_total['shares']}주"
+                    f"  {krw_total['cost']:,.0f}원 → {krw_total['market_value']:,.0f}원"
+                    f"  {pc}{krw_total['pnl']:+,.0f}원  ({krw_total['pnl_pct']:+.1f}%){C.RESET}"
+                )
 
     lines.append("")
 
@@ -735,6 +833,8 @@ def build_json_output(
     butterfly_chains: list[dict],
     report_path: str | None,
     watchlist_data: dict | None = None,
+    usd_pnl: list[dict] | None = None,
+    krw_pnl: list[dict] | None = None,
 ) -> dict:
     """Build JSON-serializable output."""
     def serialize_tranche(result):
@@ -770,6 +870,10 @@ def build_json_output(
              "detail": c.get("chain_detail")}
             for c in butterfly_chains[:5]
         ],
+        "full_portfolio": {
+            "usd": [i for i in (usd_pnl or [])],
+            "krw": [i for i in (krw_pnl or [])],
+        },
         "action_needed": t2_result.any_fired or t3_result.any_fired,
         "report_path": report_path,
         "watchlist": {
@@ -838,8 +942,12 @@ def main():
     # 4. Market overview
     market_overview = get_market_overview(db)
 
-    # 5. P&L
-    pnl_list = compute_pnl(POSITIONS, prices)
+    # 5. P&L — full portfolio (USD + KRW)
+    logger.info("Computing full portfolio P&L...")
+    all_prices = get_all_position_prices(db)
+    all_prices.update(prices)  # merge held stock prices (more recent)
+    usd_pnl, krw_pnl = compute_full_portfolio_pnl(all_prices)
+    pnl_list = compute_pnl(POSITIONS, prices)  # split-buy strategy P&L (legacy)
 
     # 6. All trigger checks (full precision)
     t2_result = check_tranche_2_triggers(prices, rsi_values)
@@ -870,7 +978,7 @@ def main():
         report_md = generate_markdown_report(
             now, market_overview, pnl_list, indicators,
             t2_result, t3_result, trend_signals, risk_data, butterfly_chains,
-            watchlist_data,
+            watchlist_data, usd_pnl=usd_pnl, krw_pnl=krw_pnl,
         )
         report_file.write_text(report_md, encoding="utf-8")
         report_path = str(report_file)
@@ -884,12 +992,14 @@ def main():
             now, market_overview, pnl_list, indicators,
             t2_result, t3_result, trend_signals, risk_data,
             butterfly_chains, report_path, watchlist_data,
+            usd_pnl=usd_pnl, krw_pnl=krw_pnl,
         )
         print(json.dumps(output, indent=2, ensure_ascii=False, default=str))
     else:
         print(format_terminal_summary(
             now, market_overview, pnl_list, indicators,
             t2_result, t3_result, risk_data, report_path, watchlist_data,
+            usd_pnl=usd_pnl, krw_pnl=krw_pnl,
         ))
 
     # Exit code

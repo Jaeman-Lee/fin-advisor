@@ -41,6 +41,7 @@ class DebateContext:
     portfolio_context: dict = field(default_factory=dict)
     active_signals: list[dict] = field(default_factory=list)
     fundamentals: dict = field(default_factory=dict)
+    global_market_data: dict = field(default_factory=dict)  # VIX, Gold, Oil, DXY, USDKRW latest
 
 
 @dataclass
