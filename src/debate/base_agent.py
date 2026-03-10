@@ -61,3 +61,35 @@ class StrategyAgent(ABC):
             "bb_mid": latest.get("bb_mid"),
             "volume": latest.get("volume"),
         }
+
+    # Override in subclasses to indicate whether this agent relies on fundamentals
+    _needs_fundamentals: bool = True
+
+    def _apply_data_quality_penalty(
+        self, confidence: float, context: DebateContext
+    ) -> float:
+        """Reduce confidence based on data quality.
+
+        Agents MUST call this before returning their opinion to ensure
+        confidence reflects actual data availability.
+        """
+        dq = context.data_quality
+        if not self._needs_fundamentals:
+            # Agents that don't use fundamentals only get stale-data penalty
+            penalty = 1.0
+            if dq.data_age_days is not None and dq.data_age_days > 3:
+                penalty -= min(dq.data_age_days * 0.02, 0.15)
+            return round(max(0.5, confidence * penalty), 2)
+
+        penalty = dq.confidence_penalty
+        adjusted = confidence * penalty
+        return round(max(0.05, adjusted), 2)
+
+    def _add_data_warnings(
+        self, flags: list[str], context: DebateContext
+    ) -> None:
+        """Add data quality warnings to agent risk flags."""
+        if not context.data_quality.is_sufficient:
+            flags.append("데이터 부족 — 신뢰도 낮음")
+        for w in context.data_quality.warnings[:2]:
+            flags.append(f"⚠ {w}")

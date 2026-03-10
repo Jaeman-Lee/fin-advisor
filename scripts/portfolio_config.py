@@ -14,9 +14,9 @@ from datetime import date, datetime
 
 # Split-Buy Strategy positions (actively monitored with triggers)
 POSITIONS = {
-    "GOOGL": {"shares": 3, "avg_price": 307.61, "buy_date": "2026-02-20"},
-    "AMZN":  {"shares": 4, "avg_price": 205.59, "buy_date": "2026-02-20"},
-    "MSFT":  {"shares": 2, "avg_price": 399.69, "buy_date": "2026-02-20"},
+    "GOOGL": {"shares": 6, "avg_price": 305.78, "buy_date": "2026-02-20"},
+    "AMZN":  {"shares": 7, "avg_price": 208.42, "buy_date": "2026-02-20"},
+    "MSFT":  {"shares": 3, "avg_price": 402.22, "buy_date": "2026-02-20"},
 }
 
 HELD_TICKERS = list(POSITIONS.keys())  # ["GOOGL", "AMZN", "MSFT"]
@@ -28,11 +28,11 @@ MARKET_TICKERS = ["^GSPC", "^VIX"]
 
 ALL_POSITIONS = {
     # US Stocks
-    "GOOGL":    {"shares": 3,  "avg_price": 307.61,  "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
-    "AMZN":     {"shares": 4,  "avg_price": 205.59,  "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
-    "MSFT":     {"shares": 2,  "avg_price": 399.69,  "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
+    "GOOGL":    {"shares": 6,  "avg_price": 305.78,  "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
+    "AMZN":     {"shares": 7,  "avg_price": 208.42,  "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
+    "MSFT":     {"shares": 3,  "avg_price": 402.22,  "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
     # ACRE: 2026-02-25 전량 손절 (15주, $8.69→$5.09, -41.4%, -$54.00)
-    "PLTR":     {"shares": 6,  "avg_price": 134.19,  "currency": "USD", "strategy": "성장주분할매수", "buy_date": "2026-02-26"},
+    # PLTR: 기매도 (확정손실 -1,278,045원, -12.7%)
     "BRK-B":    {"shares": 6,  "avg_price": 502.03,  "currency": "USD", "strategy": "가치투자", "buy_date": "2025-01-01"},
     # 한화리츠(451800.KS): 2026-03-03 매도 (18주, 5350원→5000원, -6.5%)
     # KORU: 2026-03-05 전량 매도 (8주, $453.50→$452.30, -0.27%, -$9.60)
@@ -42,7 +42,10 @@ ALL_POSITIONS = {
 
 # Non-stock assets
 GOLD_POSITION = {"qty_grams": 18, "avg_price_krw": 227431, "currency": "KRW"}
-CASH_BALANCES = {"USD": 3618.40, "KRW": 0}  # KORU 매도 대금 +$818.95, 하이닉스 27주 매수로 KRW 소진
+CASH_BALANCES = {"USD": 4969.31, "KRW": 0}  # 2026-03-10 실제 잔고
+
+# 월급 입금 (매월 21일 영업일, 200만원)
+MONTHLY_INCOME = {"day": 21, "amount_krw": 2_000_000, "note": "급여 입금 → 투자 집행일"}
 
 ALL_TICKERS = list(ALL_POSITIONS.keys())
 
@@ -79,9 +82,8 @@ WATCHLIST = {
 
 WATCHLIST_TICKERS = list(WATCHLIST.keys())
 
-TOTAL_CAPITAL = 6151.00       # US빅테크과매도 전략 예산 (USD)
-INVESTED = 3350.08            # 1차 트랜치 실투자 (빅테크 $2,544.94 + PLTR $805.14)
-REMAINING = 2799.45           # 잔여 USD 현금
+INVESTED = 4500.68            # US빅테크 1차 $2,544.94 + 2차 $1,955.74
+REMAINING = 4969.31           # 2026-03-10 실제 USD 잔고
 
 # ──────────────────────────────────────────────────────────────
 # Tranche 2 Triggers (any one fires → execute 2nd buy)
@@ -115,18 +117,6 @@ TRANCHE_3_TRADES = {
     "AMZN":  3,
     "MSFT":  1,
 }
-
-# ──────────────────────────────────────────────────────────────
-# PLTR Split-Buy Triggers (2차: 6주 추가)
-# ──────────────────────────────────────────────────────────────
-
-PLTR_TRANCHE_2_TRIGGERS = {
-    "price_drop_pct": 10.0,          # $134 → $120 이하 (-10%)
-    "time_target": "2026-03-12",     # 2주 경과
-    "rsi_threshold": 40,             # RSI <= 40 과매도 진입 시
-}
-
-PLTR_TRANCHE_2_TRADES = {"PLTR": 6}
 
 # ──────────────────────────────────────────────────────────────
 # Data Classes

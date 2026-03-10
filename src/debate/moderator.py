@@ -57,8 +57,20 @@ class DebateModerator:
         # Phase 1: Build context
         context = build_context(self.db, ticker, portfolio_config)
 
+        # Log data quality
+        dq = context.data_quality
+        if dq.warnings:
+            logger.warning(
+                "  [data-quality] %s: completeness=%.0f%%, penalty=%.2f, warnings=%s",
+                ticker, dq.completeness * 100, dq.confidence_penalty,
+                "; ".join(dq.warnings[:3]),
+            )
+
         # Phase 2: Collect opinions
         opinions = self._collect_opinions(context)
+
+        # Phase 2.5: Fact-check agent claims
+        self._fact_check_opinions(opinions, context)
 
         # Phase 3: Cross-examination
         rebuttals = self._cross_examine(opinions)
@@ -74,6 +86,12 @@ class DebateModerator:
         recommendation = self._build_recommendation(
             ticker, topic, opinions, final_signal, urgency, dissenting
         )
+
+        # Append data quality notice if there are issues
+        if context.data_quality.warnings:
+            recommendation += "\n\n⚠ 데이터 품질 경고:\n"
+            for w in context.data_quality.warnings[:5]:
+                recommendation += f"  - {w}\n"
 
         return DebateResult(
             ticker=ticker,
@@ -133,6 +151,42 @@ class DebateModerator:
                     rationale=f"평가 실패: {e}",
                 ))
         return opinions
+
+    def _fact_check_opinions(
+        self, opinions: list[StrategyOpinion], context: DebateContext
+    ) -> None:
+        """Verify agent-claimed metrics against actual context data.
+
+        Flags discrepancies and penalizes confidence for fabricated claims.
+        """
+        from src.debate.data_validator import verify_agent_metrics
+
+        indicators = {}
+        if context.market_data:
+            latest = context.market_data[-1]
+            indicators = {
+                "rsi_14": latest.get("rsi_14"),
+                "macd": latest.get("macd"),
+                "macd_signal": latest.get("macd_signal"),
+            }
+
+        for opinion in opinions:
+            if not opinion.key_metrics:
+                continue
+            discrepancies = verify_agent_metrics(
+                opinion.key_metrics,
+                context.fundamentals,
+                indicators,
+            )
+            if discrepancies:
+                for d in discrepancies:
+                    logger.warning(
+                        "  [fact-check] %s: %s", opinion.agent_name, d
+                    )
+                    opinion.risk_flags.append(f"팩트체크 실패: {d}")
+                # Penalize confidence for claims that don't match data
+                penalty = 0.1 * len(discrepancies)
+                opinion.confidence = max(0.05, opinion.confidence - penalty)
 
     def _cross_examine(self, opinions: list[StrategyOpinion]) -> list[Rebuttal]:
         """Let agents with opposing views rebut each other."""

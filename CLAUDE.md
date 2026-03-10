@@ -125,7 +125,6 @@ data/investment.db         # SQLite 데이터베이스
 | 구분 | 종목 | 전략 |
 |------|------|------|
 | US 주식 | GOOGL, AMZN, MSFT | US빅테크과매도 (분할매수) |
-| US 주식 | PLTR | 성장주분할매수 (1차 6주, 2차 대기) |
 | US 주식 | BRK-B | 가치투자 |
 | 원자재 | KRX 금 18g | 안전자산 |
 | 현금 | USD + KRW | |

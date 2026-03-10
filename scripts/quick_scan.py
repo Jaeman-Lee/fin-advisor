@@ -32,7 +32,6 @@ from portfolio_config import (
     POSITIONS,
     ALL_POSITIONS,
     ALL_TICKERS,
-    PLTR_TRANCHE_2_TRIGGERS,
     TRANCHE_2_TRADES,
     TRANCHE_3_TRADES,
     Colors,
@@ -286,40 +285,18 @@ def main():
     t2_result = check_tranche_2_triggers(held_prices, rsi_values=None)
     t3_result = check_tranche_3_triggers()
 
-    # PLTR trigger (price + time only)
-    pltr_price = {"PLTR": all_prices["PLTR"]} if "PLTR" in all_prices else {}
-    pltr_positions = {"PLTR": ALL_POSITIONS["PLTR"]} if "PLTR" in ALL_POSITIONS else {}
-    pltr_drop = check_price_drop_trigger(pltr_price, pltr_positions, PLTR_TRANCHE_2_TRIGGERS["price_drop_pct"])
-    pltr_time = check_time_elapsed_trigger(PLTR_TRANCHE_2_TRIGGERS["time_target"])
-    pltr_fired = pltr_drop.fired is True or pltr_time.fired is True
-
     # Output
     if args.json:
         output = build_json_output(price_data, pnl_list, t2_result, t3_result, now)
-        output["pltr_trigger"] = {
-            "any_fired": pltr_fired,
-            "price_drop": {"fired": pltr_drop.fired, "details": pltr_drop.details},
-            "time_elapsed": {"fired": pltr_time.fired, "details": pltr_time.details},
-        }
         print(json.dumps(output, indent=2, ensure_ascii=False))
     else:
         C = Colors
         lines = [format_terminal_output(price_data, pnl_list, t2_result, t3_result, now)]
-
-        # PLTR trigger section
-        pltr_parts = []
-        md = pltr_drop.data.get("max_drop_pct", 0)
-        days = pltr_time.data.get("days_remaining", "?")
-        target = PLTR_TRANCHE_2_TRIGGERS["time_target"]
-        pltr_parts.append(f"{C.GREEN}✓ 10% 하락{C.RESET}" if pltr_drop.fired else f"✗ 10% 하락 (현재 {md:+.1f}%)")
-        pltr_parts.append(f"{C.GREEN}✓ {target}{C.RESET}" if pltr_time.fired else f"✗ {target}까지 {days}일")
-        pltr_label = f"{C.GREEN}{C.BOLD}PLTR 2차{C.RESET}" if pltr_fired else " PLTR 2차"
-        lines.append(f"{pltr_label}: {' | '.join(pltr_parts)}")
         lines.append(f"{C.BOLD}{'═' * 58}{C.RESET}")
         print("\n".join(lines))
 
     # Exit code
-    if t2_result.any_fired or t3_result.any_fired or pltr_fired:
+    if t2_result.any_fired or t3_result.any_fired:
         sys.exit(1)
     sys.exit(0)
 

@@ -14,6 +14,7 @@ class RiskManager(StrategyAgent):
 
     name = "risk-manager"
     description = "손실 제한, 분산도, 최대낙폭, 헤지 — 거부권 보유"
+    _needs_fundamentals = False
 
     # Thresholds
     MAX_SINGLE_POSITION_PCT = 0.15  # 15% of total portfolio
@@ -95,6 +96,8 @@ class RiskManager(StrategyAgent):
         # Score to signal (inverted: negative score = SELL for risk)
         score = max(-1.0, min(0.2, score))
         confidence = min(abs(score) + 0.3, 1.0)
+        confidence = self._apply_data_quality_penalty(confidence, context)
+        self._add_data_warnings(flags, context)
 
         if score <= -0.5:
             signal = Signal.STRONG_SELL

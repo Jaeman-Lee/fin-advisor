@@ -97,6 +97,8 @@ class IncomeInvestor(StrategyAgent):
 
         score = max(-1.0, min(1.0, score))
         confidence = min(abs(score) + 0.2, 1.0)
+        confidence = self._apply_data_quality_penalty(confidence, context)
+        self._add_data_warnings(flags, context)
 
         if score >= 0.4:
             signal = Signal.STRONG_BUY

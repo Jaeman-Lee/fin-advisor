@@ -11,6 +11,7 @@ class MacroStrategist(StrategyAgent):
 
     name = "macro-strategist"
     description = "금리, 경기 사이클, 환율, 매크로 데이터 기반 전략"
+    _needs_fundamentals = False
 
     def evaluate(self, context: DebateContext) -> StrategyOpinion:
         score = 0.0
@@ -109,6 +110,8 @@ class MacroStrategist(StrategyAgent):
         # Score to signal
         score = max(-1.0, min(1.0, score))
         confidence = min(abs(score) + 0.25, 1.0)
+        confidence = self._apply_data_quality_penalty(confidence, context)
+        self._add_data_warnings(flags, context)
 
         if score >= 0.4:
             signal = Signal.STRONG_BUY

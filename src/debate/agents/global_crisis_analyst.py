@@ -23,6 +23,7 @@ class GlobalCrisisAnalyst(StrategyAgent):
 
     name = "global-crisis-analyst"
     description = "전쟁, 무역분쟁, 제재, 공급망 위기, 지정학 리스크 전문 분석"
+    _needs_fundamentals = False
 
     # Thresholds
     VIX_ELEVATED = 25.0
@@ -149,6 +150,8 @@ class GlobalCrisisAnalyst(StrategyAgent):
         # ── Score → Signal ──
         score = max(-1.0, min(0.5, score))
         confidence = min(abs(score) + 0.25, 1.0)
+        confidence = self._apply_data_quality_penalty(confidence, context)
+        self._add_data_warnings(flags, context)
 
         if score >= 0.3:
             signal = Signal.BUY

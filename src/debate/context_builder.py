@@ -116,10 +116,26 @@ def build_context(
             pass
 
     # Fundamentals (from yfinance, cached per session)
-    fundamentals = _fetch_fundamentals(ticker)
+    raw_fundamentals = _fetch_fundamentals(ticker)
+
+    # Validate fundamentals — remove out-of-bounds values
+    from src.debate.data_validator import validate_fundamentals, assess_data_quality
+    fundamentals, validation_warnings = validate_fundamentals(raw_fundamentals)
+    if validation_warnings:
+        for w in validation_warnings:
+            logger.warning("  [data-validation] %s: %s", ticker, w)
 
     # Global market data for crisis analysis (VIX, Gold, Oil, DXY, USDKRW)
     global_market_data = _fetch_global_market_data(db)
+
+    # Assess overall data quality
+    data_quality = assess_data_quality(fundamentals, market_data, macro_snapshot)
+    data_quality.warnings.extend(validation_warnings)
+    if data_quality.warnings:
+        logger.info(
+            "  [data-quality] %s: completeness=%.0f%%, warnings=%d",
+            ticker, data_quality.completeness * 100, len(data_quality.warnings),
+        )
 
     return DebateContext(
         ticker=ticker,
@@ -133,6 +149,7 @@ def build_context(
         active_signals=active_signals,
         fundamentals=fundamentals,
         global_market_data=global_market_data,
+        data_quality=data_quality,
     )
 
 

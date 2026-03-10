@@ -28,6 +28,33 @@ NEUTRAL_SIGNALS = {Signal.HOLD}
 
 
 @dataclass
+class DataQuality:
+    """Tracks data completeness and reliability for a context."""
+
+    completeness: float = 0.0
+    available_fields: list[str] = field(default_factory=list)
+    missing_fields: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    suspect_fields: list[str] = field(default_factory=list)
+    data_age_days: int | None = None
+
+    @property
+    def is_sufficient(self) -> bool:
+        return len(self.available_fields) >= 3
+
+    @property
+    def confidence_penalty(self) -> float:
+        if not self.is_sufficient:
+            return 0.3
+        penalty = 1.0
+        penalty -= (1.0 - self.completeness) * 0.3
+        penalty -= min(len(self.suspect_fields) * 0.05, 0.2)
+        if self.data_age_days is not None and self.data_age_days > 3:
+            penalty -= min(self.data_age_days * 0.02, 0.15)
+        return max(0.3, penalty)
+
+
+@dataclass
 class DebateContext:
     """Bundled data provided to all strategy agents."""
 
@@ -42,6 +69,7 @@ class DebateContext:
     active_signals: list[dict] = field(default_factory=list)
     fundamentals: dict = field(default_factory=dict)
     global_market_data: dict = field(default_factory=dict)  # VIX, Gold, Oil, DXY, USDKRW latest
+    data_quality: DataQuality = field(default_factory=DataQuality)
 
 
 @dataclass

@@ -11,6 +11,7 @@ class MomentumTrader(StrategyAgent):
 
     name = "momentum-trader"
     description = "추세 추종, 기술적 지표 기반 매매 판단"
+    _needs_fundamentals = False
 
     def evaluate(self, context: DebateContext) -> StrategyOpinion:
         ind = self._latest_indicators(context)
@@ -96,6 +97,8 @@ class MomentumTrader(StrategyAgent):
         # Score to signal
         score = max(-1.0, min(1.0, score))
         confidence = min(abs(score) + 0.2, 1.0)
+        confidence = self._apply_data_quality_penalty(confidence, context)
+        self._add_data_warnings(flags, context)
 
         if score >= 0.5:
             signal = Signal.STRONG_BUY
