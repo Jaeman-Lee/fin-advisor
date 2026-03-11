@@ -14,9 +14,9 @@ from datetime import date, datetime
 
 # Split-Buy Strategy positions (actively monitored with triggers)
 POSITIONS = {
-    "GOOGL": {"shares": 6, "avg_price": 305.78, "buy_date": "2026-02-20"},
-    "AMZN":  {"shares": 7, "avg_price": 208.42, "buy_date": "2026-02-20"},
-    "MSFT":  {"shares": 3, "avg_price": 402.22, "buy_date": "2026-02-20"},
+    "GOOGL": {"shares": 10, "avg_price": 305.16,   "buy_date": "2026-02-20"},
+    "AMZN":  {"shares": 19, "avg_price": 209.3873, "buy_date": "2026-02-20"},
+    "MSFT":  {"shares": 10, "avg_price": 404.09,   "buy_date": "2026-02-20"},
 }
 
 HELD_TICKERS = list(POSITIONS.keys())  # ["GOOGL", "AMZN", "MSFT"]
@@ -28,13 +28,15 @@ MARKET_TICKERS = ["^GSPC", "^VIX"]
 
 ALL_POSITIONS = {
     # US Stocks
-    "GOOGL":    {"shares": 6,  "avg_price": 305.78,  "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
-    "AMZN":     {"shares": 7,  "avg_price": 208.42,  "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
-    "MSFT":     {"shares": 3,  "avg_price": 402.22,  "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
+    "GOOGL":    {"shares": 10, "avg_price": 305.16,   "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
+    "AMZN":     {"shares": 19, "avg_price": 209.3873, "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
+    "MSFT":     {"shares": 10, "avg_price": 404.09,   "currency": "USD", "strategy": "US빅테크과매도", "buy_date": "2026-02-20"},
     # ACRE: 2026-02-25 전량 손절 (15주, $8.69→$5.09, -41.4%, -$54.00)
     # PLTR: 기매도 (확정손실 -1,278,045원, -12.7%)
-    "BRK-B":    {"shares": 6,  "avg_price": 502.03,  "currency": "USD", "strategy": "가치투자", "buy_date": "2025-01-01"},
-    "SHY":      {"shares": 18, "avg_price": 82.72,   "currency": "USD", "strategy": "달러예금대용", "buy_date": "2026-03-11"},
+    # SHY: 2026-03-11 매수 미체결 — 보유 없음
+    "BRK-B":    {"shares": 6,  "avg_price": 502.03,  "currency": "USD", "strategy": "가치투자",   "buy_date": "2025-01-01"},
+    "V":        {"shares": 2,  "avg_price": 314.02,  "currency": "USD", "strategy": "결제인프라",  "buy_date": "2026-03-11"},
+    "META":     {"shares": 1,  "avg_price": 657.35,  "currency": "USD", "strategy": "AI광고플랫폼", "buy_date": "2026-03-11"},
     # 한화리츠(451800.KS): 2026-03-03 매도 (18주, 5350원→5000원, -6.5%)
     # KORU: 2026-03-05 전량 매도 (8주, $453.50→$452.30, -0.27%, -$9.60)
     # KR Stocks
@@ -43,7 +45,7 @@ ALL_POSITIONS = {
 
 # Non-stock assets
 GOLD_POSITION = {"qty_grams": 18, "avg_price_krw": 227431, "currency": "KRW"}
-CASH_BALANCES = {"USD": 3480.35, "KRW": 0}  # 2026-03-11 SHY 18주 매수 후 잔고
+CASH_BALANCES = {"USD": 3683.92, "KRW": 0}  # 2026-03-11 META 1주 $657.35 매수 후
 
 # 월급 입금 (매월 21일 영업일, 200만원)
 MONTHLY_INCOME = {"day": 21, "amount_krw": 2_000_000, "note": "급여 입금 → 투자 집행일"}
@@ -79,19 +81,7 @@ WATCHLIST = {
         "added_date": "2026-03-03",
         "notes": "이란-미국 전쟁 중 크립토 헤지 수단 검토. 레버리지 특성상 단기 트레이딩 적합.",
     },
-    "V": {
-        "name": "Visa",
-        "thesis": "글로벌 결제 플랫폼 독점. GM 98%, OP margin 68%, moat 87%. 빅테크 편중 포트폴리오의 섹터 분산 효과",
-        "entry_conditions": {
-            "rsi_below": 42,            # RSI 42 이하 유지 확인
-            "macd_golden_cross": True,   # MACD 골든크로스 (현재 충족)
-        },
-        "risk_factors": ["P/E 29.5x", "규제 리스크(수수료 상한)", "핀테크 경쟁"],
-        "target_shares": 2,
-        "target_amount_usd": 630,
-        "added_date": "2026-03-11",
-        "notes": "트리플 매수 시그널 (RSI 41 + MACD 골든크로스 + 볼린저 32%). 금융 섹터 분산 1순위.",
-    },
+    # V: 2026-03-11 매수 완료 (2주 @$314.02) → ALL_POSITIONS으로 이동
     "JPM": {
         "name": "JP Morgan Chase",
         "thesis": "미국 최대 은행. P/E 14.4x (섹터 42% 할인), 순현금 $262B. 딥밸류 + 배당 수익",
