@@ -59,13 +59,19 @@ def _make_context(
             "volume": 1000000,
         }
     ]
+    f = fundamentals or {}
+    # Auto-compute data quality so agents get realistic confidence penalties
+    from src.debate.data_validator import assess_data_quality
+    data_quality = assess_data_quality(f, market_data, macro or [])
+
     return DebateContext(
         ticker=ticker,
         market_data=market_data,
-        fundamentals=fundamentals or {},
+        fundamentals=f,
         macro_snapshot=macro or [],
         portfolio_context=portfolio or {},
         risk_assessment=risk or {},
+        data_quality=data_quality,
     )
 
 

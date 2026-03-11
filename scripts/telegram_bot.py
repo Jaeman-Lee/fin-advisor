@@ -38,7 +38,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 from portfolio_config import (
     ALL_POSITIONS,
     POSITIONS,
-    PLTR_TRANCHE_2_TRIGGERS,
     compute_pnl,
     check_tranche_2_triggers,
     check_tranche_3_triggers,
@@ -232,26 +231,6 @@ def reply_trigger(chat_id: int):
     t2 = check_tranche_2_triggers(prices, rsi_values)
     t3 = check_tranche_3_triggers()
 
-    # PLTR 2차 트리거
-    pltr_price = prices.get("PLTR")
-    pltr_pos = {"PLTR": {"avg_price": 134.19, "shares": 6}}
-    pltr_drop = check_price_drop_trigger(
-        {"PLTR": pltr_price} if pltr_price else {},
-        pltr_pos,
-        PLTR_TRANCHE_2_TRIGGERS["price_drop_pct"],
-    )
-    pltr_time = check_time_elapsed_trigger(PLTR_TRANCHE_2_TRIGGERS["time_target"])
-
-    pltr_rsi_val: float | None = None
-    closes = fetch_closes("PLTR")
-    if closes is not None and len(closes) > 14:
-        pltr_rsi_val = float(calc_rsi(closes).dropna().iloc[-1])
-    pltr_rsi_fired = (
-        pltr_rsi_val is not None
-        and pltr_rsi_val <= PLTR_TRANCHE_2_TRIGGERS["rsi_threshold"]
-    )
-    pltr_any = pltr_drop.fired or pltr_time.fired or pltr_rsi_fired
-
     def icon(fired) -> str:
         return "✅" if fired else ("⏳" if fired is False else "❓")
 
@@ -267,19 +246,6 @@ def reply_trigger(chat_id: int):
     lines += ["", f"*빅테크 3차:* {'✅ FIRED' if t3.any_fired else '⏳ 대기'}"]
     for tr in t3.triggers:
         lines.append(f"  {icon(tr.fired)} {tr.details}")
-
-    rsi_detail = (
-        f"RSI {pltr_rsi_val:.1f} (기준: ≤{PLTR_TRANCHE_2_TRIGGERS['rsi_threshold']})"
-        if pltr_rsi_val is not None
-        else "RSI N/A"
-    )
-    lines += [
-        "",
-        f"*PLTR 2차:* {'✅ FIRED' if pltr_any else '⏳ 대기'}",
-        f"  {icon(pltr_drop.fired)} {pltr_drop.details}",
-        f"  {icon(pltr_time.fired)} {pltr_time.details}",
-        f"  {icon(pltr_rsi_fired)} {rsi_detail}",
-    ]
 
     send_message(chat_id, "\n".join(lines))
 

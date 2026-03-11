@@ -116,7 +116,26 @@ def build_context(
             pass
 
     # Fundamentals (from yfinance, cached per session)
-    fundamentals = _fetch_fundamentals(ticker)
+    raw_fundamentals = _fetch_fundamentals(ticker)
+
+    # Validate fundamentals — remove out-of-bounds values
+    from src.debate.data_validator import validate_fundamentals, assess_data_quality
+    fundamentals, validation_warnings = validate_fundamentals(raw_fundamentals)
+    if validation_warnings:
+        for w in validation_warnings:
+            logger.warning("  [data-validation] %s: %s", ticker, w)
+
+    # Global market data for crisis analysis (VIX, Gold, Oil, DXY, USDKRW)
+    global_market_data = _fetch_global_market_data(db)
+
+    # Assess overall data quality
+    data_quality = assess_data_quality(fundamentals, market_data, macro_snapshot)
+    data_quality.warnings.extend(validation_warnings)
+    if data_quality.warnings:
+        logger.info(
+            "  [data-quality] %s: completeness=%.0f%%, warnings=%d",
+            ticker, data_quality.completeness * 100, len(data_quality.warnings),
+        )
 
     return DebateContext(
         ticker=ticker,
@@ -129,7 +148,50 @@ def build_context(
         portfolio_context=portfolio_config or {},
         active_signals=active_signals,
         fundamentals=fundamentals,
+        global_market_data=global_market_data,
+        data_quality=data_quality,
     )
+
+
+def _fetch_global_market_data(db: DatabaseOperations) -> dict:
+    """Fetch latest data for global crisis indicators (VIX, Gold, Oil, DXY, USDKRW).
+
+    Returns dict with keys: vix, gold, oil, dxy, usdkrw — each containing
+    {close, prev_close, change_pct} or empty dict on failure.
+    """
+    result = {}
+    crisis_tickers = {
+        "vix": "^VIX",
+        "gold": "GC=F",
+        "oil": "CL=F",
+        "dxy": "DX-Y.NYB",
+        "usdkrw": "USDKRW=X",
+        "us10y": "^TNX",
+    }
+    for key, ticker in crisis_tickers.items():
+        try:
+            asset_id = db.get_asset_id(ticker)
+            if asset_id is None:
+                continue
+            rows = db.get_market_data(asset_id, limit=5)
+            if not rows:
+                continue
+            latest = rows[0]
+            prev = rows[1] if len(rows) >= 2 else None
+            close = latest.get("close") or latest.get("adj_close")
+            if close is None:
+                continue
+            close = float(close)
+            entry = {"close": close, "date": latest.get("date", "")}
+            if prev:
+                prev_close = prev.get("close") or prev.get("adj_close")
+                if prev_close and float(prev_close) > 0:
+                    entry["prev_close"] = float(prev_close)
+                    entry["change_pct"] = (close - float(prev_close)) / float(prev_close) * 100
+            result[key] = entry
+        except Exception:
+            pass
+    return result
 
 
 def _fetch_fundamentals(ticker: str) -> dict:

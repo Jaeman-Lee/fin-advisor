@@ -125,9 +125,7 @@ data/investment.db         # SQLite 데이터베이스
 | 구분 | 종목 | 전략 |
 |------|------|------|
 | US 주식 | GOOGL, AMZN, MSFT | US빅테크과매도 (분할매수) |
-| US 주식 | PLTR | 성장주분할매수 (1차 6주, 2차 대기) |
 | US 주식 | BRK-B | 가치투자 |
-| KR 주식 | 한화리츠 (451800.KS) | 리츠/배당 |
 | 원자재 | KRX 금 18g | 안전자산 |
 | 현금 | USD + KRW | |
 
@@ -139,7 +137,8 @@ data/investment.db         # SQLite 데이터베이스
 | 카메코 (CCJ) | -334,936원 (-6.1%) |
 | 팔란티어 (PLTR) | -1,278,045원 (-12.7%) |
 | ACRE | -77,220원 (-41.4%) |
-| **합계** | **-2,915,017원** |
+| 한화리츠 | -6,300원 (-6.5%) |
+| **합계** | **-2,921,317원** |
 
 ### Config 구조
 
@@ -189,7 +188,7 @@ WATCHLIST          # 관심종목 (미보유, 모니터링+진입조건 평가)
 ### 관심종목 (Watchlist)
 
 `portfolio_config.py`의 `WATCHLIST` — 미보유 종목의 진입 조건 자동 평가.
-현재: SOL-USD (Solana)
+현재: SOL-USD (Solana), BITX (2x Bitcoin Strategy ETF)
 
 Daily Analysis + Global Scan에서 자동 추적.
 
