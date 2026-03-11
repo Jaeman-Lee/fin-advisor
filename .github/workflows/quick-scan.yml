@@ -20,11 +20,14 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install yfinance pandas numpy
+        run: pip install yfinance pandas numpy requests
 
       - name: Run quick scan
         id: scan
         working-directory: scripts
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           set +e
           python quick_scan.py --no-color 2>&1 | tee scan_output.txt

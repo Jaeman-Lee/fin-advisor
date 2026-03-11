@@ -17,8 +17,11 @@ Exit codes:
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime
+
+import requests
 
 try:
     import yfinance as yf
@@ -86,6 +89,115 @@ def fetch_prices(tickers: list[str]) -> dict[str, dict]:
             continue
 
     return results
+
+
+# ──────────────────────────────────────────────────────────────
+# Telegram Alert
+# ──────────────────────────────────────────────────────────────
+
+
+def _send_telegram_msg(text: str) -> bool:
+    """Send a plain text message to Telegram. Returns True on success."""
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+    if not token or not chat_id:
+        return False
+    try:
+        resp = requests.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
+            timeout=10,
+        )
+        return resp.status_code == 200
+    except requests.RequestException:
+        return False
+
+
+def format_telegram_alert(
+    t2_result,
+    t3_result,
+    pltr_fired: bool,
+    pltr_drop,
+    pltr_time,
+    all_prices: dict[str, float],
+    pnl_list: list[dict],
+    now: datetime,
+) -> str:
+    """Format a Telegram alert message for triggered tranches."""
+    lines = []
+    lines.append("🚨 <b>분할매수 트리거 충족!</b>")
+    lines.append(f"<i>{now.strftime('%Y-%m-%d %H:%M')} KST</i>")
+    lines.append("")
+
+    # Bigtech tranche 2
+    if t2_result.any_fired:
+        fired_names = [t.name for t in t2_result.triggers if t.fired is True]
+        lines.append("📌 <b>빅테크 2차 매수 실행</b>")
+        lines.append(f"트리거: {', '.join(fired_names)}")
+        lines.append("")
+        lines.append("📋 <b>매수 주문 (빅테크 2차)</b>")
+        total_cost = 0.0
+        for ticker, shares in TRANCHE_2_TRADES.items():
+            price = all_prices.get(ticker)
+            if price:
+                cost = shares * price
+                total_cost += cost
+                lines.append(f"  {ticker:<6} {shares}주  @ ${price:,.2f}  ≈ ${cost:,.0f}")
+            else:
+                lines.append(f"  {ticker:<6} {shares}주  (가격 없음)")
+        lines.append(f"  <b>합계: ≈ ${total_cost:,.0f}</b>")
+        lines.append("")
+
+    # Bigtech tranche 3
+    if t3_result.any_fired:
+        fired_names = [t.name for t in t3_result.triggers if t.fired is True]
+        lines.append("📌 <b>빅테크 3차 매수 실행</b>")
+        lines.append(f"트리거: {', '.join(fired_names)}")
+        lines.append("")
+        lines.append("📋 <b>매수 주문 (빅테크 3차)</b>")
+        total_cost = 0.0
+        for ticker, shares in TRANCHE_3_TRADES.items():
+            price = all_prices.get(ticker)
+            if price:
+                cost = shares * price
+                total_cost += cost
+                lines.append(f"  {ticker:<6} {shares}주  @ ${price:,.2f}  ≈ ${cost:,.0f}")
+            else:
+                lines.append(f"  {ticker:<6} {shares}주  (가격 없음)")
+        lines.append(f"  <b>합계: ≈ ${total_cost:,.0f}</b>")
+        lines.append("")
+
+    # PLTR tranche 2
+    if pltr_fired:
+        fired_reasons = []
+        if pltr_drop.fired:
+            fired_reasons.append(pltr_drop.name)
+        if pltr_time.fired:
+            fired_reasons.append(pltr_time.name)
+        lines.append("📌 <b>PLTR 2차 매수 실행</b>")
+        lines.append(f"트리거: {', '.join(fired_reasons)}")
+        lines.append("")
+        lines.append("📋 <b>매수 주문 (PLTR 2차)</b>")
+        pltr_price = all_prices.get("PLTR")
+        if pltr_price:
+            cost = 6 * pltr_price
+            lines.append(f"  PLTR   6주  @ ${pltr_price:,.2f}  ≈ ${cost:,.0f}")
+            lines.append(f"  <b>합계: ≈ ${cost:,.0f}</b>")
+        lines.append("")
+
+    # Current P&L snapshot
+    pnl_rows = [p for p in pnl_list if p["ticker"] != "TOTAL"]
+    total_row = next((p for p in pnl_list if p["ticker"] == "TOTAL"), None)
+    if pnl_rows:
+        lines.append("💰 <b>현재 P&amp;L</b>")
+        for p in pnl_rows:
+            sign = "+" if p["pnl"] >= 0 else ""
+            lines.append(f"  {p['ticker']:<6} ${p['current_price']:,.2f}  {sign}{p['pnl_pct']:.1f}%")
+        if total_row:
+            sign = "+" if total_row["pnl"] >= 0 else ""
+            lines.append(f"  <b>합계  ${total_row['market_value']:,.0f}  {sign}{total_row['pnl']:,.0f} ({sign}{total_row['pnl_pct']:.1f}%)</b>")
+
+    return "\n".join(lines)
 
 
 # ──────────────────────────────────────────────────────────────
@@ -318,8 +430,25 @@ def main():
         lines.append(f"{C.BOLD}{'═' * 58}{C.RESET}")
         print("\n".join(lines))
 
+    # Telegram alert — auto-send when trigger fires and env vars are set
+    any_triggered = t2_result.any_fired or t3_result.any_fired or pltr_fired
+    if any_triggered:
+        token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+        if token and chat_id:
+            msg = format_telegram_alert(
+                t2_result, t3_result, pltr_fired, pltr_drop, pltr_time,
+                all_prices, pnl_list, now,
+            )
+            ok = _send_telegram_msg(msg)
+            if not args.json:
+                status = "✓ Telegram 알림 발송 완료" if ok else "✗ Telegram 발송 실패"
+                print(status, file=sys.stderr)
+        elif not args.json:
+            print("(Telegram 미설정 — TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID 없음)", file=sys.stderr)
+
     # Exit code
-    if t2_result.any_fired or t3_result.any_fired or pltr_fired:
+    if any_triggered:
         sys.exit(1)
     sys.exit(0)
 
