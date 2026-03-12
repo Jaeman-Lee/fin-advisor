@@ -1,10 +1,9 @@
-name: Global Scan (Daytime)
+name: Global Scan (Daytime) [LEGACY - use event-collector]
 
 on:
-  schedule:
-    # KST 12:00, 18:00 (= UTC 03:00, 09:00) 월~금
-    - cron: '0 3,9 * * 1-5'
-  workflow_dispatch: # 수동 실행
+  # schedule disabled — replaced by event-collector.yml
+  # - cron: '0 3,9 * * 1-5'
+  workflow_dispatch: # 수동 실행만 가능
 
 jobs:
   global-scan:

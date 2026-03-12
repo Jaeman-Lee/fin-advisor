@@ -1,0 +1,96 @@
+name: Event Collector Pipeline
+
+on:
+  schedule:
+    # === 미장 시간 (KST 23:30~06:00 = UTC 14:30~21:00), 15분 간격 ===
+    - cron: '*/15 14-21 * * 1-5'
+    # === 나머지 시간 (KST 장중+프리마켓), 30분 간격 ===
+    - cron: '0,30 0-13,22-23 * * 1-5'
+    # === 주말 (크립토/글로벌 모니터링), 하루 2회 ===
+    - cron: '0 3,15 * * 0,6'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Run mode'
+        required: false
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - dry-run
+          - detect-only
+      tickers:
+        description: 'Specific tickers (space-separated, empty=all)'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  event-collector:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install yfinance pandas numpy pandas-ta nltk beautifulsoup4 requests python-dateutil
+          python -c "import nltk; nltk.download('vader_lexicon', quiet=True)" || true
+
+      - name: Initialize database
+        run: python scripts/init_db.py
+
+      - name: Run event collector
+        id: collector
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set +e
+
+          # Build arguments
+          ARGS=""
+          MODE="${{ github.event.inputs.mode || 'full' }}"
+          if [ "$MODE" = "dry-run" ]; then
+            ARGS="$ARGS --dry-run"
+          elif [ "$MODE" = "detect-only" ]; then
+            ARGS="$ARGS --detect-only"
+          fi
+
+          TICKERS="${{ github.event.inputs.tickers }}"
+          if [ -n "$TICKERS" ]; then
+            ARGS="$ARGS --tickers $TICKERS"
+          fi
+
+          python scripts/event_collector.py $ARGS -v 2>&1 | tee collector_output.txt
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          echo "EXIT_CODE=$EXIT_CODE"
+          exit 0
+
+      - name: Send alert email (events detected)
+        if: steps.collector.outputs.exit_code == '1'
+        env:
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: |
+          python scripts/send_report.py \
+            --subject "🔔 Event Detected — $(date +%Y-%m-%d' '%H:%M) UTC" \
+            --body-file collector_output.txt
+
+      - name: Upload output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: event-collector-${{ github.run_number }}
+          path: collector_output.txt
+          retention-days: 7

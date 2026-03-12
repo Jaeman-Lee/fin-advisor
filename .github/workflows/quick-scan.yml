@@ -1,10 +1,9 @@
-name: Quick Scan (Track A)
+name: Quick Scan (Track A) [LEGACY - use event-collector]
 
 on:
-  schedule:
-    # KST 0시, 2시, 4시, 6시 (= UTC 15, 17, 19, 21시) 월~금
-    - cron: '0 15,17,19,21 * * 1-5'
-  workflow_dispatch: # 수동 실행 가능
+  # schedule disabled — replaced by event-collector.yml
+  # - cron: '0 15,17,19,21 * * 1-5'
+  workflow_dispatch: # 수동 실행만 가능
 
 jobs:
   quick-scan:
