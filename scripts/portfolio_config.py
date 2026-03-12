@@ -45,7 +45,7 @@ ALL_POSITIONS = {
 
 # Non-stock assets
 GOLD_POSITION = {"qty_grams": 18, "avg_price_krw": 227431, "currency": "KRW"}
-CASH_BALANCES = {"USD": 3683.92, "KRW": 0}  # 2026-03-11 META 1주 $657.35 매수 후
+CASH_BALANCES = {"USD": 3682.00, "KRW": 0}  # 2026-03-12 실제 잔고
 
 # 월급 입금 (매월 21일 영업일, 200만원)
 MONTHLY_INCOME = {"day": 21, "amount_krw": 2_000_000, "note": "급여 입금 → 투자 집행일"}
@@ -112,7 +112,7 @@ WATCHLIST = {
 WATCHLIST_TICKERS = list(WATCHLIST.keys())
 
 INVESTED = 4500.68            # US빅테크 1차 $2,544.94 + 2차 $1,955.74
-REMAINING = 3480.35           # 2026-03-11 SHY 매수 후 USD 잔고
+REMAINING = 3682.00           # 2026-03-12 실제 USD 잔고
 
 # ──────────────────────────────────────────────────────────────
 # Tranche 2 Triggers (any one fires → execute 2nd buy)
