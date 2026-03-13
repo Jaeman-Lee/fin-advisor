@@ -1,0 +1,78 @@
+name: Portfolio Monitor (24h)
+
+on:
+  schedule:
+    # === US 미장 시간 (KST 23:30~06:00 = UTC 14:30~21:00), 15분 간격 ===
+    - cron: '*/15 14-21 * * 1-5'
+    # === KR 장중 (KST 09:00~15:30 = UTC 00:00~06:30), 10분 간격 ===
+    - cron: '*/10 0-6 * * 1-5'
+    # === KR 프리마켓+NXT (KST 08:00~09:00, 15:30~20:00 = UTC 23, 07-11), 15분 간격 ===
+    - cron: '*/15 23 * * 0-4'
+    - cron: '*/15 7-11 * * 1-5'
+    # === 주말 (크립토/글로벌), 4시간 간격 ===
+    - cron: '0 0,6,12,18 * * 0,6'
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: 'Monitoring scope'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - us-only
+          - kr-only
+      dry_run:
+        description: 'Dry run (no Telegram)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install yfinance pandas numpy requests beautifulsoup4
+
+      - name: Run portfolio monitor
+        id: monitor
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set +e
+          ARGS="--once"
+
+          SCOPE="${{ github.event.inputs.scope || 'all' }}"
+          if [ "$SCOPE" = "us-only" ]; then
+            ARGS="$ARGS --us-only"
+          elif [ "$SCOPE" = "kr-only" ]; then
+            ARGS="$ARGS --kr-only"
+          fi
+
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+
+          python scripts/portfolio_monitor.py $ARGS 2>&1 | tee monitor_output.txt
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          exit 0
+
+      - name: Upload output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portfolio-monitor-${{ github.run_number }}
+          path: monitor_output.txt
+          retention-days: 3
